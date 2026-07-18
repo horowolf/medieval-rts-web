@@ -371,7 +371,7 @@
 </div></div>
 <script>
 "use strict";
-
+/* ============ 0. Foundations: seeded RNG + fixed timestep (the short form of the determinism rules) ============ */
 let seed=20260611;
 function rng(){seed|=0;seed=seed+0x6D2B79F5|0;let x=Math.imul(seed^seed>>>15,1|seed);
   x=x+Math.imul(x^x>>>7,61|x)^x;return((x^x>>>14)>>>0)/4294967296;}
@@ -381,7 +381,7 @@ const q=s=>document.querySelector(s);
 for(const ev of ['gesturestart','gesturechange','gestureend'])
   document.addEventListener(ev,e=>e.preventDefault(),{passive:false});
 
-
+/* ============ 0b. String table (no user-facing text is hard-coded past this point) ============ */
 const STR={
   r_wood:'木',r_stone:'石',r_iron:'鐵',r_gold:'金',r_food:'食',
   u_spear:'槍兵',uc_spear:'槍',u_archer:'弓兵',uc_archer:'弓',
@@ -563,8 +563,16 @@ const STR={
 };
 function fmt(s,o){return s.replace(/\{(\w+)\}/g,(m,k)=>o[k]);}
 
-
-
+/* ============ 1. Constants ============ */
+/* Map registry. Each map supplies its size, a terrain painter, a resource
+   placer, starting positions and a routing style for AI attack waves.
+   ?map=<id> picks one; the map button cycles through them (reloading, so the
+   world is rebuilt cleanly).
+   Mirroring is a hard rule: terrain and resources are always defined for the
+   left half and mirrored into the right, and the enemy town centre is derived
+   from the player's with mirTx() rather than typed in. A hand-typed enemy town
+   centre two tiles off centre once handed one side a compounding economic lead
+   and a near-100% win rate on a supposedly symmetric map. */
 const MAP_DEFS={
   land:    {nm:'陸戰圖',   ic:'🗺️', tw:128,th:72, paint:()=>paintLandTerrain(),     nodes:()=>addLandNodes(),     ptc:[20,34], routes:'ns',
             desc:'標準陸戰：雙高地＋側翼林＋中段無人區（R8 放大版·現行基線圖）',
@@ -586,7 +594,12 @@ let aiEco=new URLSearchParams(location.search).get('noai')!=='1';
 let aiRoutesDirty=true; 
 const TILE=40,TW=MAP_DEF.tw,TH=MAP_DEF.th,W=TW*TILE,H=TH*TILE; 
 const T_PLAIN=0,T_HIGH=1,T_RAMP=2,T_FOREST=3,T_SWAMP=4,T_WATER=5,T_SHALLOW=6,T_BRIDGE=7;
-
+/* Water movement layers: deep water carries ships and blocks land units;
+   shallows slow land units down (they make natural chokepoints) and ground
+   ships; bridges carry land units at full speed and block ships. All three sit
+   at height 0, so the existing cliff system draws coastal cliffs for free.
+   Land and water are separate movement domains -- equal height alone would not
+   keep them apart, so domOK() is what actually separates them. */
 const RES=[
   {k:'wood', nm:STR.r_wood, ic:'🌲', col:'#3f9e57'},
   {k:'stone',nm:STR.r_stone,ic:'🪨', col:'#a8adb3'},
@@ -594,14 +607,26 @@ const RES=[
   {k:'gold', nm:STR.r_gold, ic:'🪙', col:'#e8c01f'},
   {k:'food', nm:STR.r_food, ic:'🌾', col:'#e0824f'},
 ];
-
-
+/* vol = garrison volume; bio = living (healable, heals slowly while garrisoned);
+   up = food upkeep per second; aM/aP = melee/ranged defence;
+   bld = the building that trains it. */
+/* The unit table is the AI's vocabulary as well as the game's: adding a unit is
+   adding a row, and the formation system picks it up without the AI logic ever
+   naming a concrete unit type.
+   role   = front / ranged / mobile / siege / anti-armour / support, the terms
+            army composition is expressed in
+   thW    = threat weight: how much countering force one sighted unit calls for
+   repl   = upgrade chain: which unit this one supersedes, inheriting its quota
+   ulk    = the research that unlocks it */
 const UT={
   spear:   {nm:STR.u_spear,ch:STR.uc_spear,hp:60, dmg:8, rng:18, cd:1.0,sp:70, vis:6,bld:'barracks',role:'front',thW:.9,
             cost:{food:40,wood:20},bt:6, bonus:{cavalry:2},vol:1,bio:true,up:.06,aM:1,aP:1},
   archer:  {nm:STR.u_archer,ch:STR.uc_archer,hp:40, dmg:7, rng:150,cd:1.2,sp:70, vis:8,proj:330,bld:'barracks',role:'ranged',thW:1,
             cost:{food:30,wood:35},bt:7, bonus:{spear:1.6},vol:1,bio:true,up:.06,aM:0,aP:0},
-  
+  /* mount:true marks stable-trained riders, which is the surface the horseshoe
+     research acts on -- horse archers included, since they come from the same
+     stable and the same cavalry line. Scouts are deliberately excluded: they are
+     not in the units array, cost no upkeep and follow their own table. */
   cavalry: {nm:STR.u_cavalry,ch:STR.uc_cavalry,hp:95, dmg:11,rng:18, cd:1.0,sp:115,vis:6,bld:'stable',br:9,role:'mobile',thW:1.1,ulk:'U1',mount:true,
             cost:{food:60,gold:35},bt:9, bonus:{archer:1.8,catapult:1.8},vol:2,bio:true,up:.10,aM:1,aP:1},
   catapult:{nm:STR.u_catapult,ch:STR.uc_catapult,hp:55, dmg:26,rng:235,minRng:70,cd:3.6,sp:45,vis:7,bld:'smith',br:12,setup:2.5,role:'siege',thW:1.2,ulk:'U2',
@@ -642,7 +667,12 @@ let SPLASH_FF=0.5;
 const SCOUT_CAP=2; 
 const SETTLER_CAP=2; 
 const MED_HEAL_R=50,MED_SEEK_R=170; 
-
+/* cap = garrison capacity (in unit volume); rc/rT = repair cost basis and time.
+   Command centres come in three tiers: the capital and cities count as command
+   centres -- lose them all and the game is lost -- while cities additionally act
+   as backup lives, so a fallen capital is not the end. Outposts are cheap, do not
+   count as a life, and can be upgraded into cities. The capital can be rebuilt,
+   but only while you have none. */
 const BT={
   tc:      {nm:STR.b_tc,      ic:'🏛️',hp:1000,size:2,vis:8,rng:220,dmg:10,cd:1.1,cap:12,
             cc:true,prod:'full',dropoff:true,rc:{wood:150,stone:80},rT:40,cost:{wood:300,stone:200},buildT:40},
@@ -669,8 +699,13 @@ const BT={
   dock:    {nm:STR.b_dock,    ic:'⚓',hp:600, size:2,vis:5,cost:{wood:120},buildT:25,dock:true},
   fishtrap:{nm:STR.b_fishtrap,ic:'🎣',hp:80,  size:1,vis:2,cost:{wood:60},buildT:10,fishtrap:true,raid:true}, 
 };
-
-
+/* Chevauchee targets: farms, coppices and fish traps -- the renewable resource
+   buildings. Deliberately not "all buildings": historically a chevauchee went
+   around castles and burned the fields, and mechanically a generic building bonus
+   would turn horse archers into siege units competing with the catapult. */
+/* Base regrowth for farms and coppices (food/wood per second). At 0.6 of a
+   villager's 2/s gathering rate, one farm is worth roughly one villager working
+   next to the town centre. */
 let FARM_REGEN=1.2,COPPICE_REGEN=1.2;
 const TAGCOL=['#e0b323','#4db6e8','#9c64e8','#e8643c','#52c97a','#e85c9c','#8a9aa8','#c9a06b']; 
 const TASKS={attack:{nm:STR.task_attack,ic:'⚔️'},guard:{nm:STR.task_guard,ic:'🛡️'},
@@ -681,9 +716,16 @@ let KITE_RADIAL=false;
 const KITE_OUTRNG=30;      
 const KITE_MELEE=50;       
 const MODES={explore:{nm:STR.mode_explore,ic:'🧭'},sentry:{nm:STR.mode_sentry,ic:'👁'},observe:{nm:STR.mode_observe,ic:'🔭'}};
+/* ============ Civilisations: one shared tech tree + a per-civilisation mask ============
+   One shared tree plus an enable/lock mask per civilisation is the whole backend:
+   adding a civilisation is adding a mask, which is pure data.
+   Fields: cat = category | tier 1/2/3 | kind: val stat, fn feature, unlock, uniq
+   unique unit | star = civilisation branch point (mutually exclusive) | at = the
+   building it is researched at | req = prerequisites, kept at most two deep. */
 
-
-
+/* dom = the AI's effect domain (economy / military / defence / intelligence /
+   naval). It is the key the scoring system files a demand under, so a new
+   research attached to an existing category gets a domain for free. */
 const TECH_CAT=[ 
   {k:'econ',nm:'經濟採集',ic:'🌾',col:'#e0a44f',dom:'eco'},
   {k:'mil', nm:'軍事攻防',ic:'⚔️',col:'#e0644f',dom:'mil'},
@@ -741,7 +783,15 @@ const TECH=[
 ];
 
 const UNIVERSAL=TECH.filter(x=>!x.star&&x.kind!=='uniq').map(x=>x.id); 
-
+/* The civilisation table's AI columns exist so that adding a civilisation is
+   adding a row rather than editing code:
+   personality  opening bias, harassment, retreat threshold, expansion appetite,
+                how early it walls
+   priorities   research order and the starred line it commits to (identity
+                follows the actual civilisation; personality only shapes style)
+   counters     per-opponent composition multipliers and research queue-jumping
+   The "tell" column is derived automatically from the unique unit: sighting one
+   is what lets the opponent infer the civilisation. */
 const CIVS=[
   {id:'eng',aid:'england',nm:'英格蘭',ic:'🏹',proto:'弓 / 遠戰',flag:'#e0644f',stars:['S2','S3','M9','NE'],uniq:'UL',
    str:'弓兵射程/齊射、自耕農均衡經濟、城堡尚可',weak:'正面近戰肉搏弱、機動偏慢',
@@ -766,7 +816,12 @@ function civEnabled(civ){civ=civById(civ);
   return new Set([...UNIVERSAL,...civ.stars,civ.uniq]);}
 function starOwner(id){return CIVS.filter(c=>c.stars.includes(id)||c.uniq===id).map(c=>c.nm);} 
 
-
+/* Per-side state: resources, research, civilisation, army groups, behaviour and
+   food supply, one set each. The AI is a player that follows the rules, so it
+   shares this structure and the same order functions (side is a parameter,
+   defaulting to the human player).
+   scripted = fed by free waves instead of production, and therefore exempt from
+   upkeep and starvation. The real AI runs with it false: same rules, same costs. */
 
 function mkSideState(si){return {
   i:si,civ:CIVS[0],
@@ -851,7 +906,9 @@ function recomputeBuildingHp(si){
 function recomputeFarmCap(si){ 
   si=si||0;for(const b of buildings)if(b.side===si&&b.type==='farm'&&b.node)b.node.max=90+modOf(si).farmCap;
 }
-
+/* Tables derived from the unit, research and civilisation tables. Adding a row
+   and calling rebuildAiTables() is enough for formations, civilisation tells and
+   unlocks to notice it -- no code changes. */
 let UNIQ_UNLOCK={};      
 let AI_MILTYPES=new Set();
 let AI_UNIQ={};          
@@ -962,19 +1019,27 @@ function setPlayerCiv(c){c=civById(c);if(!c)return playerCiv.id;
   if(typeof updateBuildRow==='function')updateBuildRow();                                  
   return playerCiv.id;}
 
-
+/* ============ 2. Map ============ */
 const terr=new Uint8Array(TW*TH);
 const blocked=new Uint8Array(TW*TH);
 const gateMask=new Uint8Array(TW*TH); 
 const wallMask=new Uint8Array(TW*TH); 
-
+/* Forests. Every tree is both a wood source and one point of sight blocking; two
+   stacked block sight completely, so a two-tile-thick stand cannot be seen
+   through and only the inside of a thicker one actually hides units.
+   By default, scattered single trees are marked for felling (villagers gather
+   them like any wood), while solid stands are left standing so ambush cover is
+   not auto-harvested. Felling a tile turns it to plain, which opens sight lines --
+   clearing woods to deny an ambush is an emergent tactic, not a scripted one. */
 const forestWood=new Int16Array(TW*TH); 
 const logMark=new Uint8Array(TW*TH);    
 let forestComp=new Int32Array(TW*TH).fill(-1); 
 let forestThick=[];                     
 const forestDeep=new Uint8Array(TW*TH); 
 let FOREST_WOOD=100;                     
-
+/* Hiding capacity is not a number: how many units fit in a wood falls out of
+   their body radii not overlapping. Whoever does not fit stands outside in plain
+   sight. Nothing about the size of a forest leaks to the player before scouting. */
 const idx=(tx,ty)=>ty*TW+tx;
 const txOf=x=>Math.max(0,Math.min(TW-1,Math.floor(x/TILE)));
 const tyOf=y=>Math.max(0,Math.min(TH-1,Math.floor(y/TILE)));
@@ -995,7 +1060,15 @@ function computeLandComp(){
     c++;
   }
 }
-
+/* ============ Walkable regions ============
+   A region id per tile, so findPath can reject "unreachable, ever" in O(1)
+   instead of flood-filling the map on every call.
+   Land and water get separate tables, and shallows belong to both (land units
+   wade, ships crawl). Sharing one table would splice land and water into a single
+   region through every ford and make the whole thing meaningless.
+   Note this is not the same as the land/water flood fill used for island checks:
+   that one ignores blocked tiles and height, so a pocket walled off by cliffs
+   counts as connected there and must not be confused with reachability. */
 let pathCompL=null,pathCompW=null,pathCompDirty=true,pathCompT=-1e9;
 const PC_MAXR=40;      
 function computePathComp(){
@@ -1020,7 +1093,13 @@ function computePathComp(){
   pathCompDirty=false;pathCompT=t;
 }
 function ensurePathComp(){if(pathCompDirty||!pathCompL||t-pathCompT>=5)computePathComp();}
-
+/* Nearest tile of our own region to the target point -- not to the target's
+   region. Ordering units somewhere they cannot reach should walk them somewhere
+   legible rather than leave them standing still.
+   The Chebyshev ring is scanned outward, and because a ring of radius r reaches
+   Euclidean distance 1.415r, the scan continues past the first hit to be sure the
+   closest point is found. Ties go to whichever was scanned first, which keeps it
+   deterministic. */
 function nearestInComp(dtx,dty,cid,C){
   let best=-1,bd=1e18,until=-1;
   for(let r=0;r<=PC_MAXR;r++){
@@ -1066,7 +1145,8 @@ function paintNavalTerrain(){
   mir(L,midY,IL-1,midY+1,T_SHALLOW);          
   mir(cx-20,9,cx-17,11,T_FOREST); mir(cx-20,TH-12,cx-17,TH-10,T_FOREST); 
 }
-
+/* Mirroring helpers shared by every map: define the left half, mirror it to the
+   right at the same y. Symmetric terrain is a fairness rule, not a nicety. */
 const mirT=(x0,y0,x1,y1,tp)=>{trect(x0,y0,x1,y1,tp);trect(TW-1-x1,y0,TW-1-x0,y1,tp);};
 function paintLandTerrain(){ 
   const cx=(TW/2)|0,mir=mirT;
@@ -1076,7 +1156,8 @@ function paintLandTerrain(){
   mir(cx-18,15,cx-13,20,T_FOREST); mir(cx-18,TH-21,cx-13,TH-16,T_FOREST);   
 }
 function paintArenaTerrain(){ 
-  
+  /* terr is a zero-filled Uint8Array and T_PLAIN is 0, so an unpainted map is
+     already all plain. */
 }
 function paintPlainsTerrain(){ 
   const cx=(TW/2)|0,mir=mirT;
@@ -1116,7 +1197,9 @@ function addNavalNodes(){
     for(const X of [(tx+0.5)*TILE,W-(tx+0.5)*TILE])
       nodes.push({type:'food',sea:true,x:X,y:(ty+0.5)*TILE,amt:450,max:450});
 }
-
+/* One resource placer per map. The shared rule is the same as for terrain:
+   define the left half and mirror it. Wood comes from forest tiles unless a map
+   deliberately has none. */
 const addMir=tab=>{for(const k in tab){addN(k,tab[k]);addN(k,tab[k].map(([x,y,a])=>[W-x,y,a]));}};
 function addLandNodes(){
   
@@ -1155,7 +1238,10 @@ function addHighlandNodes(){
   });
 }
 MAP_DEF.nodes();
-
+/* There is only one kind of tree in the game. Discrete wood nodes become single
+   forest tiles carrying the same amount of wood: they block one point of sight,
+   turn to plain when exhausted, and -- being too sparse to form a solid stand --
+   are marked for felling by default, so the economy behaves as it always did. */
 function convertWoodNodesToTrees(){
   nodes=nodes.filter(n=>{
     if(n.type!=='wood'||n.farm||n.forestI!==undefined)return true;
@@ -1164,7 +1250,13 @@ function convertWoodNodesToTrees(){
   });
 }
 convertWoodNodesToTrees();
-
+/* Every forest tile is a wood node, so felling one clears the tile, reopens sight
+   and recomputes the fog and forest regions.
+   The default marking follows the two-tile thickness rule: single trees and thin
+   lines are marked for felling by both sides (cutting them costs nobody any
+   tactical value), while solid stands are left alone so screens and ambush cover
+   survive. What is left of a stand mid-game keeps its marking; each side decides
+   for itself. */
 function initForest(){
   nodes=nodes.filter(n=>n.forestI===undefined); 
   for(let i=0;i<TW*TH;i++){
@@ -1198,28 +1290,33 @@ function harvestForestTile(i){
   aiRoutesDirty=true;pathCompDirty=true; 
 }
 
-
+/* ============ 3. State ============ */
 const stock=SIDES[0].stock;        
 const gathered=SIDES[0].gathered;
 const shares=SIDES[0].shares;
 const priceIdx=SIDES[0].priceIdx;
-
+/* Villager behaviour has two tracks: a town bell for peacetime, and an
+   under-attack order of repair (if critical) > garrison > stance. */
 let units=[],villagers=[],buildings=[],shots=[],markers=[],pings=[],scouts=[],ghosts=[],misses=[];
 let t=0,gameOver=null,fogT=0,rebT=0,sepT=0,mmT=0,repT=0;
 let terrainDirty=false,terrainPaintT=0; 
 let scoutSeq=0,expDone=false,villagerSeq=0,unitSeq=0;
-
+/* Villager and scout production is queued per command centre rather than
+   globally, so a fallen capital does not stop a city from replacing losses.
+   Resources are spent on order and refunded on cancel, as with the barracks. */
 function cqCount(u,si){let n=0;si=si||0;for(const b of buildings)if(b.cq&&b.side===si)for(const it of b.cq)if(it.u===u)n++;return n;}
 function hasCC(side){return buildings.some(b=>b.side===side&&b.hp>0&&BT[b.type].cc);}        
 function hasCapital(side){return buildings.some(b=>b.side===side&&b.hp>0&&b.type==='tc');}    
 function nLives(side){return buildings.filter(b=>b.side===side&&b.hp>0&&BT[b.type].life).length;} 
-
+/* Three-stage starvation warnings and upkeep are per side; scripted sides pay
+   neither. */
 
 for(const [nm,k] of [['turtleBell','bell'],['garrisonOn','garrisonOn'],['repairOn','repairOn'],['stance','stance'],['starving','starving'],['starveN','starveN'],['starveT','starveT'],['curUpkeep','curUpkeep']])
   Object.defineProperty(window,nm,{get:()=>SIDES[0][k],set:v=>{SIDES[0][k]=v;}});
 let foodRate=0,foodAcc=0,foodRateT=0,foodWarn=false; 
 const prodAcc={wood:0,stone:0,iron:0,gold:0,food:0},prodRate={wood:0,stone:0,iron:0,gold:0,food:0}; 
-
+/* Development tooling: coordinate readouts and timestamps for reporting a unit
+   that misbehaves during play. */
 let dbgMode=false;     
 let spectate=false;    
 let paused=false;      
@@ -1309,10 +1406,23 @@ const tags=SIDES[0].tags;
 const visible=new Uint8Array(TW*TH),explored=new Uint8Array(TW*TH);
 const visibleE=new Uint8Array(TW*TH); 
 const exploredE=new Uint8Array(TW*TH); 
-
+/* Omniscience shortcut, off by default: the AI scouts for its information like
+   any player. Army positions and composition are never handed to it at any
+   difficulty. When on, it is symmetric -- both sides see everything -- and exists
+   only so tests do not have to scout before asserting anything. */
 let aiFullVision=false;
 let arenaMode=false; 
-
+/* Engagement model: one global engagement radius became a per-unit one derived
+   from sight and weapon range, plus group support.
+   Attack orders are attack-moves: each unit engages within max(sight, range) along
+   the way and pursues without a leash, leaving the decision to disengage to the
+   player. Reaching the ordered point survives the detour -- units finish the walk
+   after a chase, then hold there. Guard and patrol use the more conservative
+   min(range, cap) and stay anchored to their post.
+   Support works off the centroid of a group's engaged cluster: idle members
+   nearby join in, distant ones are not dragged across the map. That is what stops
+   reinforcements trickling in one at a time and stops fights daisy-chaining across
+   the map. */
 let engModel=2;
 const ENG={ guardFloor:130, guardCap:200, guardChase:300, helpA:380, helpG:170, giveup:0, progress:30 };
 function engageR(u,g,T){ 
@@ -1328,7 +1438,12 @@ function rallyPrepass(){
   for(const u of units)if(u.hp>0&&!u.gar&&u.grp&&u.tgt&&u.tgt.hp>0&&!u.tgt.gar){const g=u.grp;g._fx+=u.x;g._fy+=u.y;g._fn++;}
   for(const g of seen){if(g._fn>0){g.fightPt={x:g._fx/g._fn,y:g._fy/g._fn};g.inCombat=true;}else{g.fightPt=null;g.inCombat=false;}}
 }
-
+/* Cliff thickness. A top-down view cannot show height, so a cliff has to read as
+   width -- and the width you see is exactly the keep-out width used for
+   collision, which turns cutting a corner across a cliff from something the code
+   fights into something the geometry forbids.
+   A cliff edge is highland meeting plain, forest or marsh; ramps differ by too
+   little to count, so cliffs break naturally where a ramp is. */
 let cliffH=11, cliffW=11;
 let rampApron=null; 
 function buildRampApron(){ rampApron=new Uint8Array(TW*TH);
@@ -1351,7 +1466,8 @@ const lastSeenTE=new Float32Array(TW*TH);
 const unreachable=new Uint8Array(TW*TH); 
 const unreachableE=new Uint8Array(TW*TH); 
 
-
+/* Building footprints in tiles. Gates are the one rectangle: 2x1 against a
+   horizontal wall, 1x2 against a vertical one. */
 function fpOf(type,ori){
   const s=BT[type].size;
   if(type==='gate')return ori==='v'?{w:1,h:2}:{w:2,h:1};
@@ -1383,7 +1499,8 @@ function ejectFootprint(b,fp){
   for(const v of villagers)if(v.hp>0&&!v.garrisoned&&inFp(v))out(v);
   for(const s of scouts)if(s.hp>0&&inFp(s))out(s);
 }
-
+/* Completion hooks: a farm becomes a renewable food node, a coppice a renewable
+   wood node -- one villager each, never exhausted. */
 function onBuilt(b){
   if(b.type==='farm'&&!b.node){
     b.node={type:'food',x:b.x,y:b.y,amt:30,max:90+modOf(b.side).farmCap,farm:true,fSide:b.side}; 
@@ -1397,11 +1514,17 @@ function onBuilt(b){
   }
 }
 
-
+/* Starting positions: yours comes from the map table, the enemy's is always
+   derived from it by mirroring rather than typed in. The bug that motivated this
+   was exactly a typed-in value two tiles off, which shortened one side's opening
+   gathering loop and compounded into a lopsided win rate. */
 const mirTx=(tx,w=2)=>TW-tx-w; 
 const START={ptc:MAP_DEF.ptc,etc:[mirTx(MAP_DEF.ptc[0]),MAP_DEF.ptc[1]],
   pbar:MAP_DEF.pbar,ebar:MAP_DEF.ebar,etw:MAP_DEF.etw}; 
-
+/* Both sides open with a town centre and villagers, nothing else. Barracks,
+   towers and castles are for the player to decide on -- and for the AI to decide
+   too: its strategy layer builds its own barracks and its fortification logic its
+   own towers, rather than starting with them for free. */
 const playerTC=placeB(0,'tc',START.ptc[0],START.ptc[1],true);
 const enemyTC=placeB(1,'tc',START.etc[0],START.etc[1],true);
 
@@ -1467,18 +1590,30 @@ function spawnScout(b=playerTC){
   renderScoutbar();
 }
 
-
-
+/* ============ 4. Pathfinding (A* over tiles) ============
+   Six places ask "can something stand on this tile?", and they are meant to differ
+   -- placement rules are stricter than walking rules. What went wrong once was not
+   having six of them, it was not having written down the one standard they vary
+   from: gates are obstacles that are not in the blocked array (they are side-aware
+   instead), one of the six missed that, and an order onto an enemy gate sent A*
+   flood-filling the whole map before returning nothing. */
+/* An enemy gate blocks; your own is walkable. Defined here and nowhere else. */
 const foeGate=(i,side)=>!!(gateMask[i]&&gateMask[i]-1!==(side||0)); 
 const standOK=(i,side,dom)=>!blocked[i]&&!foeGate(i,side)&&domOK(i,dom); 
 function canStep(a,b,side,dom){if(!standOK(b,side,dom))return false;
   if(dom==='water')return true;          
   return Math.abs(hgtI(a)-hgtI(b))<=0.5;} 
-
+/* Straight-line walkability, sampled: no blocked tile, no cliff crossed between
+   samples. Used for path smoothing and for deciding whether a chase can go
+   straight or has to path around. */
 function lineWalkable(x0,y0,x1,y1,side,avoidDanger,dom){
   const dist=Math.hypot(x1-x0,y1-y0),steps=Math.max(1,Math.ceil(dist/(TILE*0.34)));
   let ptx=txOf(x0),pty=tyOf(y0),ph=hgtI(idx(ptx,pty));
-  
+  /* Slow ground -- marsh and shallows -- may not be smoothed through. A* already
+     routes around it by cost, but string-pulling would happily straighten the detour
+     back across the marsh, which is why units appeared to ignore it. The rule only
+     applies when both ends of a segment are on fast ground: a path that genuinely
+     uses a ford has its A* nodes on the slow tiles, so fords still work. */
   const slowEnds=spdI(idx(ptx,pty))<=0.6||spdI(idx(txOf(x1),tyOf(y1)))<=0.6;
   for(let i=1;i<=steps;i++){
     const x=x0+(x1-x0)*i/steps,y=y0+(y1-y0)*i/steps,tx=txOf(x),ty=tyOf(y);
@@ -1499,7 +1634,8 @@ function lineWalkable(x0,y0,x1,y1,side,avoidDanger,dom){
   }
   return true;
 }
-
+/* Path smoothing (string-pulling): turn A*'s staircase into long straight runs,
+   always keeping the final node. */
 function smoothPath(sx,sy,path,side,avoidDanger,dom){
   if(path.length<2)return path;
   const last=path[path.length-1],out=[];let cx=sx,cy=sy,i=0;
@@ -1512,7 +1648,8 @@ function smoothPath(sx,sy,path,side,avoidDanger,dom){
   if(o.x!==last.x||o.y!==last.y)out.push(last);
   return out;
 }
-
+/* Pathfinding counters -- cross-region fallbacks and genuine failures. Readable
+   from the console, so "it cannot get there" is visible in probes and in play. */
 let fpXR=0,fpFail=0,fpCross=false;
 function findPath(sx,sy,dx,dy,side,avoidDanger,dom,pen){ 
   ensurePathComp();
@@ -1544,7 +1681,14 @@ function findPath(sx,sy,dx,dy,side,avoidDanger,dom,pen){
   const inO=new Uint8Array(NG);
   const dxA=[1,-1,0,0,1,1,-1,-1],dyA=[0,0,1,-1,1,-1,1,-1];
   const hx=d%TW,hy=(d/TW)|0;
-  
+  /* The open set is a binary min-heap. It used to be a plain array scanned linearly
+     for the minimum, which is O(n^2) and was fine on a small map; at 128x72 tiles a
+     single call went from about 0.1ms to 2ms, and profiling put pathfinding at 85%
+     of all simulation time -- the sole cause of the frame-time spikes.
+     This is a pure data-structure swap and must not change behaviour by one bit, or
+     every balance baseline shifts. The old linear scan compared strictly, so ties
+     went to whichever was pushed first; the heap reproduces that with an insertion
+     sequence number as the tie-break. */
   const heap=new Int32Array(NG);let hn=0;
   const seq=new Int32Array(NG),pos=new Int32Array(NG).fill(-1);let sq=0;
   const fOf=n=>{const nx=n%TW,ny=(n/TW)|0;return g[n]+Math.max(Math.abs(nx-hx),Math.abs(ny-hy));}; 
@@ -1612,9 +1756,15 @@ function nearestLegalXY(e,R){
   return best;
 }
 
-
+/* ============ 5. Fog of war ============ */
 function losOk(x0,y0,x1,y1,vh,vSide,pierce){ 
-  
+  /* Sight through trees: each forest tile on the ray blocks one point, two block it
+     completely. The target's tile counts, the observer's does not -- so a single
+     tree hides nothing, and hiding means standing behind the second row. Looking
+     out of a wood follows the same rule, so standing too deep blinds you too and
+     the best ambush position is the second row.
+     Concealment is what emerges from that rule; there is no "forests are special"
+     case anywhere. */
   const tt=idx(x1,y1);
   const cd=Math.max(Math.abs(x1-x0),Math.abs(y1-y0));
   if(hgtI(tt)>hgtI(idx(x0,y0))+0.01&&cd>1)return false;                   
@@ -1669,19 +1819,43 @@ function updateFog(){
 }
 const tileVis=(x,y)=>!!visible[idx(txOf(x),tyOf(y))];
 
-
+/* Danger avoidance. Tiles within three of a known enemy unit are marked
+   dangerous, and villagers' automatic pathing treats that as a soft cost -- go
+   around if going around is possible.
+   This only applies where the player has not expressed an intent: an explicit
+   assignment, a nudge, or the keep-working stance all ignore danger.
+   A second level marks the firing envelope of seen enemy defences plus a buffer.
+   That one is hard: villagers will not gather inside it at all, and any caught
+   inside flee. Towers are not units, so the unit-based danger never saw them --
+   which is how villagers ended up gathering next to an enemy tower until they
+   died. */
 const dangerMask=new Uint8Array(TW*TH);
-
+/* Danger memory: a tile where an enemy was seen stays dangerous for a while, and
+   villagers treat its resources as unavailable meanwhile. Without it they walk
+   straight back to the same tower the moment it leaves their sight.
+   The memory is cleared by re-exploring the tile and finding it empty -- so
+   confirming that ground is safe takes a scout -- with a time limit as a backstop
+   so nothing stays feared forever inside the fog. It is never drawn: it is memory,
+   not a permanent marker. */
 const dangerMem=new Float32Array(TW*TH);
 let DANGER_MEM=45;
 const remDanger=i=>dangerMem[i]>t;
-
+/* The AI's symmetric copy: threats originating from the other side, gated through
+   that side's vision by the same rules, so its villagers avoid your towers and
+   remember dangerous ground exactly as yours do. */
 const dangerMaskE=new Uint8Array(TW*TH);
 const dangerMemE=new Float32Array(TW*TH);
 const dmaskOf=si=>(si||0)===1?dangerMaskE:dangerMask;
 const dmemOf=si=>(si||0)===1?dangerMemE:dangerMem;
 const remDangerS=(i,si)=>dmemOf(si)[i]>t;
-
+/* == Intelligence gate (per side; the only one in the project) ==============
+   What a side can currently see, and what it remembers, is answered by these four
+   functions only. Ask them; never read the vision buffers directly.
+   Why the layer exists: the omniscience shortcut used to be wired only into the
+   branches for side 1, a leftover from when side 0 was always the human. Once the
+   game could run AI against AI, that shortcut meant one side quietly played with
+   better information than the other -- and it surfaced as a side bias nobody could
+   explain for weeks. */
 const visOf=si=>(si||0)===1?visibleE:visible;   
 const expOf=si=>(si||0)===1?exploredE:explored; 
 const uSeen=(e,si)=>aiFullVision||!!visOf(si)[idx(txOf(e.x),tyOf(e.y))]||e.revealT>t; 
@@ -1731,7 +1905,14 @@ function computeDanger(){
     for(let i=0;i<TW*TH;i++)if(!dangerMaskE[i]&&visibleE[i]&&dangerMemE[i]>t)dangerMemE[i]=0;
   }
 }
-
+/* Construction sites inside enemy defensive fire are re-checked, not just checked
+   once. A site can be clean when it is placed and become lethal later when the
+   enemy builds a tower next to it; villagers then shuttle back and forth for
+   minutes trying to finish an eighteen-second building.
+   Everything else in the danger system re-evaluates every tick -- the assigned
+   build site was the one thing that stayed fixed until it was finished or
+   destroyed. When the fire goes away (the tower falls, the garrison leaves) work
+   resumes automatically: one rule covering both directions. */
 let AI_SITEFIRE=true;      
 const siteFireObs=[0,0];   
 const fireFP=(si,tx,ty,w,h)=>{const dm=dmaskOf(si);
@@ -1739,22 +1920,38 @@ const fireFP=(si,tx,ty,w,h)=>{const dm=dmaskOf(si);
     if(dm[idx(x,y)]===2)return true;
   return false;};
 const siteInFire=(b,si)=>fireFP(si===undefined?(b.side||0):si,b.tx,b.ty,b.w||b.size,b.h||b.size);
-
+/* Cancelling a construction order also withdraws the unfinished site. Leaving it
+   behind meant the repair scan kept trying to staff a site that the danger rules
+   kept refusing, while the half-built shell went on occupying one of the AI's
+   expansion slots -- which is how fixing a real bug once made the AI dramatically
+   worse.
+   No refund, matching the rest of the game: cancelling construction is a sunk
+   cost, otherwise place-cancel-place becomes free scouting. */
 function withdrawSite(b){
   if(!b||b.done||b.bySettler||b.hp<=0)return false;
   b.withdrawn=true;b.hp=0;
   return true;
 }
-
+/* Body radius: one physical circle per unit, in pixels. People are 6, heavy
+   infantry 7, riders 8-9, siege 12, ships 9-12 -- roughly the square root of the
+   relative footprints. Separation, melee contact and drawing all use it, so what
+   you see is what is occupied, and how many units a wood can hide follows from it
+   rather than from a capacity number. */
 const bodyR=o=>o.type&&UT[o.type]?(UT[o.type].br||6):(o.mode?8:6); 
-
+/* Concealment feedback: a unit standing on a deep forest tile -- one whose eight
+   neighbours are all trees, so normal sight cannot reach it -- and not currently
+   exposed by its own fire is drawn semi-transparent, meaning "hidden". Standing at
+   the treeline is drawn solid.
+   This is purely visual and derived from terrain the player can already see, so it
+   cannot leak whether the enemy sees you. */
 const concealedFx=o=>{const i=idx(txOf(o.x),tyOf(o.y));return terr[i]===T_FOREST&&!!forestDeep[i]&&!(o.revealT>t);};
 
-
+/* ============ 6. Economy (villagers) ============ */
 const alive=v=>v.hp>0;
 function moveToward(o,tx,ty,sp,dt){const dx=tx-o.x,dy=ty-o.y,d=Math.hypot(dx,dy);
   if(d<1e-6)return 0;const st=Math.min(d,sp*dt);o.x+=dx/d*st;o.y+=dy/d*st;return d-st;}
-
+/* General movement: A* over any real distance (ramps are mandatory), straight-line
+   over short ones, never across a cliff. */
 function vGoto(v,x,y,sp,dt,avoidDanger){
   if(!v.dest||Math.hypot(v.dest.x-x,v.dest.y-y)>24){
     v.dest={x,y};v.path=findPath(v.x,v.y,x,y,v.side||0,avoidDanger,v.dom); 
@@ -1851,16 +2048,37 @@ function dropApproach(v,b){
 function nearestFoe(x,y,r,si){let b=null,bd=r;si=si||0; 
   for(const e of units)if(e.side!==si&&e.hp>0){const d=Math.hypot(e.x-x,e.y-y);if(d<bd){bd=d;b=e;}}
   return b;}
-
+/* Villagers only take fright at enemies that can actually hurt them. Scanning for
+   any enemy at all meant a single enemy medic -- who does no damage and outruns
+   spearmen -- could stop an entire economy by standing next to it, and effectively
+   warned the victim before the units that could kill them arrived.
+   Military units deliberately do not use this filter: an army should target medics. */
 function villFoe(x,y,r,si){let b=null,bd=r;si=si||0;
   for(const e of units)if(e.side!==si&&e.hp>0&&(UT[e.type]?.dmg||0)>0){const d=Math.hypot(e.x-x,e.y-y);if(d<bd){bd=d;b=e;}}
   return b;}
-
+/* Two things wake a villager: an armed enemy inside three tiles, or being hit
+   (including a neighbour shouting after being hit).
+   The radius is derived from weapon ranges rather than picked flat, and three tiles
+   puts it just inside every ranged unit's reach: archers, longbows and catapults
+   all get one free shot before the villagers react, while horse archers fall just
+   outside and have to close the distance -- raiding on mobility rather than range.
+   The second trigger is not optional: without it a catapult sitting outside the
+   alert radius killed seven of eight villagers in forty seconds without any of
+   them reacting at all. */
 const VILL_ALERT=3*TILE, VILL_HURT=4, VILL_SHOUT=150; 
 
-
+/* Natural resource nodes seat a limited number of gatherers, and the seats are
+   shared across factions -- both sides compete for the same node. Finite nodes are
+   what force expansion and fights over ground.
+   Renewable buildings (farms, coppices, fish traps) stay one villager each.
+   A seat is held for the whole round trip, so nobody is queue-jumped mid-haul. */
 const NODE_CAP=6, NODE_RETRY=0.5; 
-
+/* Seat counts are recomputed per call, which costs O(villagers) and cannot go
+   stale.
+   The earlier version had the free-seat check scan the villagers itself, and it was
+   called inside a per-node loop -- O(nodes x villagers). Since every forest tile is
+   a node, late-game maps have thousands of nodes and hundreds of villagers, and a
+   single simulation step went from 2.7ms to 41ms. */
 function nodeSeats(){
   const m=new Map();
   for(const o of villagers)if(o.node&&alive(o)){
@@ -1927,7 +2145,9 @@ function assignBuilders(site,nWant){
     .sort((a,b)=>Math.hypot(a.x-site.x,a.y-site.y)-Math.hypot(b.x-site.x,b.y-site.y));
   for(const v of cands){if(got>=cap)break;v.buildSite=site;got++;}
 }
-
+/* Repair scan: damaged, safe, finished buildings get villagers assigned
+   automatically (repair is an extension of building), and siege engines get one
+   villager each. */
 function repairScan(si){si=si||0;
   for(const b of buildings){
     if(b.side!==si||b.hp<=0)continue;
@@ -1948,7 +2168,7 @@ function repairScan(si){si=si||0;
     if(best&&bd<=240){best.repairU=m;rebalance(si);} 
   }
 }
-
+/* Flee target: the nearest finished friendly building with room to garrison. */
 function fleeShelter(v){
   const th=villFoe(v.x,v.y,320,v.side); 
   let best=null,bd=1e9;
@@ -1963,7 +2183,10 @@ function fleeShelter(v){
   }
   return best;
 }
-
+/* Valid targets for fighting back: enemies inside our vision (including any
+   exposed by their own fire) that are attacking us or a villager nearby, nearest
+   first. "Do not chase too far" is defined by vision -- what cannot be seen is not
+   followed. */
 function villThreat(v){
   let best=null,bd=1e9;
   for(const e of units)if(e.side!==(v.side||0)&&e.hp>0&&(tileVis(e.x,e.y)||e.revealT>t)){
@@ -1974,9 +2197,14 @@ function villThreat(v){
   }
   return best;
 }
-
+/* A building counts as besieged when an enemy is within 240px, which is what
+   locks automatic repair out of danger. */
 function underFire(b){return units.some(e=>e.side!==b.side&&e.hp>0&&Math.hypot(e.x-b.x,e.y-b.y)<240);}
-
+/* Emergency repair target: a damaged, besieged, still-standing friendly building,
+   nearest and within 420px -- nobody is pulled across the map to die.
+   Where garrisoning is also possible, hysteresis on the building decides: above
+   75% HP villagers stay hidden, below 40% they come out to repair, so they do not
+   oscillate in and out of the door. */
 function besiegedTarget(v){
   let best=null,bd=1e9;
   for(const b of buildings){
@@ -1988,14 +2216,19 @@ function besiegedTarget(v){
   }
   return best;
 }
-
+/* Nearest finished friendly building, used as cover for idle villagers. */
 function coverBuilding(v){
   let best=null,bd=1e9;
   for(const b of buildings)if(b.side===(v.side||0)&&b.done&&b.hp>0){
     const d=Math.hypot(b.x-v.x,b.y-v.y);if(d<bd){bd=d;best=b;}}
   return best;
 }
-
+/* Fleeing moves one step directly away from the weighted sum of nearby enemies,
+   rather than towards a building -- which is what stopped villagers running to a
+   town centre they could not enter and standing there being shot.
+   When a wall, cliff or map edge blocks that direction, it widens the search angle
+   and takes the walkable direction that still moves furthest from the enemy.
+   Returns true while still fleeing. */
 function villFleeStep(v,dt){
   let fx=0,fy=0,near=false;
   for(const e of units)if(e.side!==(v.side||0)&&e.hp>0){
@@ -2025,7 +2258,8 @@ function villFleeStep(v,dt){
   }
   v.path=[];v.dest=null;return true; 
 }
-
+/* Stance resolution when not repairing and not hiding: fight back = attack the
+   nearest threat, flee = retreat, keep working = carry on. */
 function villStance(v,th){
   const stance=S_(v.side).stance;
   if(stance==='fight'){
@@ -2038,7 +2272,13 @@ function villStance(v,th){
   }else if(stance==='flee'){v.state='retreat';}
   else v.state='idle'; 
 }
-
+/* One-shot nudge: dragging a unit walks it to where you let go, then clears --
+   and it goes back to whatever it was doing. It works on every unit type as a
+   safety valve for getting something unstuck.
+   One at a time, no box select: no reward for clicking speed, so it never becomes
+   micromanagement. It is safe on military units too, because "go back to what you
+   were doing" walks them back to their group, so nobody can hand-place a formation
+   unit by unit with it. */
 function nudgeSpeed(u){
   if(u.scout||u.mode)return SCT.sp;            
   if(u.carry!==undefined)return 75;            
@@ -2089,8 +2329,12 @@ function vTick(v,dt){
     const o=nearestOpen(v.x,v.y);v.state='walk';vGoto(v,o.x,o.y,65,dt);return;}
   v.atkCd=Math.max(0,v.atkCd-dt);
   const avD=S_(v.side).stance!=='gather'; 
-  
-  
+  /* Villager behaviour, arbitrated: emergency repair (critical) > garrison / bell >
+     stance. */
+  /* The two triggers again: an armed enemy within four tiles, or having been hit
+     recently (including a shout from a neighbour). The second one looks back over a
+     wider 340px to find the threat, so that a catapult with 235 range is not only
+     noticed but locatable -- you have to know which way to run. */
   const hurt=t-(v.hurtT??-9)<VILL_HURT;
   const th=villFoe(v.x,v.y,VILL_ALERT,v.side)||(hurt?villFoe(v.x,v.y,340,v.side):null);
   if(v.shelter&&t-(v.flT??t)>=12)v.shelter=null; 
@@ -2114,7 +2358,11 @@ function vTick(v,dt){
   }else if(defThr){ 
     v.state='retreat';v.node=null;
   }else{ 
-    
+    /* Already on the way to cover means not giving up halfway. Without this check a
+       villager that got 240px from the enemy was sent back to idle, stopped in the
+       open and never reached the town centre at all -- garrison counts peaked at zero.
+       Coming back out is the building's job (safe for three seconds, then released),
+       and the work time lost on that trip is exactly what a raid should cost. */
     const onWay=v.state==='flee'&&v.shelter&&v.shelter.hp>0&&canEnter(v.shelter,1);
     if(!onWay&&(v.state==='flee'||v.state==='retreat'||v.state==='fight')&&!hurt&&(S_(v.side).bell||!villFoe(v.x,v.y,240,v.side)))v.state='idle';
   }
@@ -2129,7 +2377,8 @@ function vTick(v,dt){
       else{const ap=dropApproach(v,sh);vGoto(v,ap?ap.x:sh.x,ap?ap.y:sh.y,80,dt,avD);} 
       return;
     }
-    
+    /* Full, or nothing to garrison in: with a threat, fall back to the stance (fight,
+       flee or keep working); without one, carry on working. */
     const t2=villFoe(v.x,v.y,230,v.side);
     if(t2)villStance(v,t2); else if(!hurt)v.state='idle';
   }
@@ -2173,7 +2422,11 @@ function vTick(v,dt){
     const s=v.buildSite;
     if(!s||s.hp<=0||(s.done&&s.hp>=s.maxHp)){v.buildSite=null;rebalance(v.side);return;}
     const d=Math.hypot(s.x-v.x,s.y-v.y);
-    
+    /* Contact test for construction: normal buildings within radius + 22 of the
+       centre, docks (which sit in water) as soon as the villager stands on a tile
+       adjacent to the footprint -- otherwise a villager on the shore is just outside
+       the radius, cannot reach the dock and stands there idle. Both require the same
+       height level: you cannot build up a cliff from below. */
     let contact;
     if(s.type==='dock'){const px=txOf(v.x),py=tyOf(v.y),fw=s.w||s.size,fh=s.h||s.size;
       contact=px>=s.tx-1&&px<=s.tx+fw&&py>=s.ty-1&&py<=s.ty+fh&&sameLevelXY(v,s);}
@@ -2187,7 +2440,10 @@ function vTick(v,dt){
         if((v.side||0)===0)alertMsg('white',fmt(STR.msg_built,{b:BT[s.type].nm}));
         villagers.forEach(o=>{if(o.buildSite===s)o.buildSite=null;});rebalance(s.side);}
     }else{
-      
+      /* Repairs cost resources: a full repair is 35% of the build cost, scaled by how
+         much damage there is. Buildings with their own repair basis use it -- the capital
+         and cities are free at game start or arrive by upgrade, so their rebuild cost is
+         not their repair cost. */
       const rc=BT[s.type].rc||BT[s.type].cost;
       const rT=BT[s.type].rT||BT[s.type].buildT*2;
       const stk=stockOf(v.side),frac=dt/rT*modOf(v.side).repair; 
@@ -2237,7 +2493,12 @@ function vTick(v,dt){
     }}
   v.lackRes=null;
   const d=Math.hypot(v.node.x-v.x,v.node.y-v.y);
-  
+  /* Gatherers stand on a ring around the node, spread by the golden angle from their
+     id, so several villagers on one node each walk to their own spot instead of
+     colliding on whoever arrived first.
+     Arrival uses two thresholds: approaching aims tightly at your own ring point,
+     while already-gathering accepts a loose radius, so being jostled does not knock
+     anyone off the job. */
   const ga=((v.id||0)*2.399)%6.283,gx=v.node.x+Math.cos(ga)*10,gy=v.node.y+Math.sin(ga)*10;
   const dR=Math.hypot(gx-v.x,gy-v.y);
   
@@ -2255,8 +2516,12 @@ function vTick(v,dt){
         if(!v.node.farm)checkDepleted(v.node.type,v.side);}}
   }
 }
-
-
+/* Fishing boats are villagers on water: gather the nearest fishery, haul to the
+   dock, flee when threatened. They neither build nor fight. */
+/* Fishing-boat flight: the villager algorithm on water and at boat speed. Legality
+   keeps it in its own movement domain, blocked directions widen the search angle,
+   and direction hysteresis stops the jitter. It keeps retreating until nothing is
+   within 300px, and does not return to the fishery on its own. */
 function boatFleeStep(u,dt){
   let fx=0,fy=0,near=false;
   for(const e of units)if(e.side!==u.side&&e.hp>0&&!e.gar){
@@ -2306,7 +2571,14 @@ function fishTick(u,dt){
   if(!u.node||u.node.amt<=0){const old=u.node;u.node=nearestFish(u.x,u.y,u.side,u.stance!=='gather',u);
     if(u.node!==old){u._gD=undefined;u._fish=false;}
     if(!u.node){u.path.length=0;return;}} 
-  
+  /* Ring positions for boats, matching villagers. Boats have a body radius of 9, so
+     two hulls sit at least 18px apart -- but the old code required being within 16px
+     of the node centre to count as fishing, so the third and fourth boat on a
+     fishery were pushed out of gathering range by separation every tick, repathed,
+     and were pushed out again. Over a minute the fourth boat travelled 1092px
+     without gathering anything.
+     The fix is one golden-angle ring point per boat at the separation radius, two
+     arrival thresholds to stop the jitter, and a jam valve for an occupied point. */
   const ga=((u.id||0)*2.399)%6.283,gx=u.node.x+Math.cos(ga)*18,gy=u.node.y+Math.sin(ga)*18;
   const dR=Math.hypot(gx-u.x,gy-u.y),d=Math.hypot(u.node.x-u.x,u.node.y-u.y);
   if(u._gD===undefined||dR<u._gD-1.5){u._gD=dR;u._gP=t;}
@@ -2321,7 +2593,7 @@ function fishTick(u,dt){
       if(u.node.amt<=0)checkDepleted('food',u.side);}}
 }
 
-
+/* ============ 7. Military units ============ */
 function dmgEnt(e,amt){
   e.hp-=amt;
   
@@ -2359,7 +2631,8 @@ function canSee(u,e){
   if(aiFullVision)return terr[ei]!==T_FOREST||!!visOf(si)[ei];
   return e.size?seenBy(e,si):!!visOf(si)[ei];        
 }
-
+/* Terrain integrity lives in these two checks: placement, shoving, straight-line
+   destinations and close-quarters interaction all go through them. */
 function sameLevelXY(a,e){
   return Math.abs(hgtI(idx(txOf(a.x),tyOf(a.y)))-hgtI(idx(txOf(e.x),tyOf(e.y))))<=0.5;
 }
@@ -2372,7 +2645,8 @@ function isLegalPosition(e,px,py){
   if(cliffW>0&&nearCliff(px,py)&&!nearCliff(e.x,e.y))return false; 
   return true;
 }
-
+/* Melee cannot reach across a cliff -- more than half a level of difference
+   forbids it, a ramp's half level does not. Ranged fire is unaffected. */
 function canMeleeXY(a,e){return sameLevelXY(a,e);}
 const isWaterUnit=e=>!!(e&&e.type&&UT[e.type]&&UT[e.type].dom==='water'); 
 function canMelee(u,e){
@@ -2380,7 +2654,9 @@ function canMelee(u,e){
   if(!e.size&&(u.dom==='water')!==isWaterUnit(e))return false; 
   return canMeleeXY(u,e);
 }
-
+/* Focus fire: the group votes on a shared target. Ranged units vote for every
+   enemy in range, melee for the nearest, and the most-voted wins with the lowest
+   HP breaking ties. Recomputed every 0.4s with hysteresis so it does not flicker. */
 function concentrateTarget(g,side){
   if(g.autoFocus&&(g.autoFocus.hp<=0||g.autoFocus.gar))g.autoFocus=null;
   if(g.autoFocus&&(g.afT||0)>t)return g.autoFocus;
@@ -2427,7 +2703,10 @@ function acquire(u){
      &&Math.hypot(g.focus.x-anchor.x,g.focus.y-anchor.y)<R+(g.focus.size?g.focus.size*TILE/2:0)+40)
     return g.focus;
   if(!cands.length){
-    
+    /* Return fire: being attacked by a visible enemy locks onto it even outside the
+       engagement radius -- which is what guard and hold postures need most. The chase
+       is still bounded by the order's leash, and the unit returns to its post
+       afterwards. */
     const a=u.lastHitBy;
     if(a&&a.hp>0&&!a.gar&&t-(u.lastHitT||0)<3&&canSee(u,a)&&canMelee(u,a)&&!(a.scout&&Math.hypot(a.x-u.x,a.y-u.y)>90))return a;
     return null;
@@ -2454,7 +2733,14 @@ function stepDir(u,dx,dy,dt,sp){
   if(isLegalPosition(u,nx,ny)){u.x=nx;u.y=ny;u.movedT=t;return true;}
   return false; 
 }
-
+/* Walking around units that are standing still. Before each step the unit looks a
+   short way ahead: if someone stationary is in the way, it takes the first legal
+   direction to one side that does not run into another stationary unit -- it slides
+   past. If every direction is blocked (a wall of people in a gap) it falls back to
+   pushing through at 45% speed. Shoving works, but it has resistance, and the
+   natural path is the one without any.
+   It does not avoid its own attack target, moving units (two movers simply give way
+   to each other), or anything within a step of its destination. */
 function avoidBlocker(u,tx2,ty2,st){
   const dx=tx2-u.x,dy=ty2-u.y,dd=Math.hypot(dx,dy);
   if(dd<1e-6)return null;
@@ -2516,7 +2802,10 @@ function stepPath(u,dt){
   const st=Math.min(dd,sp*dt),ux=dx/dd*st,uy=dy/dd*st;
   const av=avoidBlocker(u,wpt.x,wpt.y,st); 
   const nx=av?av.x:u.x+ux,ny=av?av.y:u.y+uy;
-  
+  /* Cliff guard: if a frame's movement would cross more than half a level, the path
+     has been corner-cut or shoved off course, so it repaths rather than walking over
+     a cliff. A unit that finds itself inside a blocked tile -- built over, or spawned
+     inside a building -- is allowed out to any unblocked tile. */
   const stuck=blocked[idx(txOf(u.x),tyOf(u.y))];
   if(stuck||isLegalPosition(u,nx,ny)){u.x=nx;u.y=ny;u.movedT=t;if(dd-st<8)u.path.shift();}
   
@@ -2545,7 +2834,15 @@ function fire(u,e){
     }
   }else{if(!e.size){e.lastHitBy=u;e.lastHitT=t;} dmgEnt(e,Math.max(1,dmg*bonusVs(T,e,u.side)-armM(e)));} 
 }
-
+/* Target weighting for the counter rule. It decides *who* to shoot, never how much
+   damage is done; damage comes from the bonus table.
+   The default borrows the damage multipliers as scores: units that shoot back rank
+   above towers, which rank above other buildings, so incoming damage drops first.
+   Siege units carry a building bonus and therefore still prefer buildings. On the
+   easiest difficulty the rule is simply "nearest", with no ordering at all.
+   Lookup order: buildings check the raid category (farms, coppices, fish traps)
+   first, then the building type; non-buildings check villager, then unit type;
+   anything unlisted falls back to the default. */
 function tgtW(T,e){
   const ty=e.size?'building':(e.carry!==undefined?'villager':e.type);
   const P=T.pick;
@@ -2562,11 +2859,19 @@ function bonusVs(T,e,side){
   if(b>1)b=1+(b-1)*modOf(side).counterDmg; 
   return b;
 }
-
+/* Melee and ranged defence (buildings and villagers have none; siege splash
+   ignores defence entirely). */
 function shipDefBonus(e){return (UT[e.type]&&UT[e.type].dom==='water')?modOf(e.side).shipDef:0;} 
 function armM(e){if(e.size||e.carry!==undefined)return 0;if(e.scout)return SCT.aM;return (UT[e.type].aM||0)+modOf(e.side).meleeDef+shipDefBonus(e);} 
 function armP(e){if(e.size||e.carry!==undefined)return 0;if(e.scout)return SCT.aP;return (UT[e.type].aP||0)+modOf(e.side).rangedDef+shipDefBonus(e);} 
-
+/* Siege engines need setup time: a unit with a setup value has to stand still for
+   that long before it can fire, and any movement restarts the count.
+   It keys off the last-moved timestamp rather than its own state, because only
+   real movement writes that timestamp -- being shoved by a friendly unit does not,
+   so physical jostling never interrupts a setup, and firing while relocating stops
+   working automatically without a check in every branch.
+   Only the first shot after repositioning is affected: once set up the cooldown is
+   unchanged, so setup costs mobility, not damage output. */
 function siegeReady(u){const s=UT[u.type]&&UT[u.type].setup;return !s||t-(u.movedT||0)>=s;}
 function holdMult(u){const T=UT[u.type];if(!T.holdDmg)return 1;return (t-(u.movedT||0))>=(T.holdSec||1.4)?T.holdDmg:1;} 
 function setupFrac(u){const s=UT[u.type]&&UT[u.type].setup;return s?Math.min(1,(t-(u.movedT||0))/s):1;} 
@@ -2590,13 +2895,15 @@ function recomputeShipHp(si){
   si=si||0;for(const u of units){if(u.side!==si||!UT[u.type]||UT[u.type].dom!=='water')continue;
     const r=u.maxHp>0?u.hp/u.maxHp:1;u.maxHp=UT[u.type].hp*shipHpMult(u.type,si);u.hp=u.maxHp*r;}
 }
-
+/* Medics: never attack, automatically heal the worst-wounded living unit nearby,
+   and back off when an enemy closes in. */
 function medTick(u,dt){
   const foe=nearestFoe(u.x,u.y,60,u.side);
   if(foe){u.medTgt=null;stepDir(u,u.x-foe.x,u.y-foe.y,dt,uSpeed(u));return;} 
   const ratio=a=>a.hp/a.maxHp;
   const valid=a=>a&&a.hp>0&&a.hp<a.maxHp&&!a.gar&&!a.garrisoned&&Math.hypot(a.x-u.x,a.y-u.y)<=MED_SEEK_R;
-  
+  /* Candidates are wounded living units within seek range, ordered by lowest HP
+     fraction, then by distance. */
   let best=null,bs=2,bd=1e9;
   const consider=a=>{if(a===u.medAvoid&&t<(u.medAvoidUntil||0))return; 
     const r=ratio(a),d=Math.hypot(a.x-u.x,a.y-u.y);if(d>MED_SEEK_R)return;
@@ -2626,7 +2933,8 @@ function medTick(u,dt){
     if(u.path.length)stepPath(u,dt);
   }
 }
-
+/* ============ Patrol zones (friendly buildings, single-linkage clustering,
+   recomputed whenever one is built or lost) ============ */
 const ZONE_D=14*TILE; 
 function playerZones(si){si=si||0; 
   const bs=buildings.filter(b=>b.side===si&&b.done&&b.hp>0),n=bs.length,comp=new Array(n).fill(-1);let c=0;
@@ -2759,7 +3067,11 @@ function uTick(u,dt){
       const ex=e.x-u.x,ey=e.y-u.y,dl=Math.hypot(ex,ey)||1,ux=ex/dl,uy=ey/dl;
       const eRng=UT[e.type]?unitRng(e):((BT[e.type]&&BT[e.type].rng)||0); 
       if(KITE_RADIAL&&eRng<KITE_MELEE&&RNG>=eRng+KITE_OUTRNG){ 
-        
+        /* Kiting stands between the enemy's range and ours, biased towards the enemy.
+           Deliberately not at the very edge of our own range: sitting at the boundary makes
+           units drift in and out of it, which amplifies tiny timing differences into win-
+           rate differences. It also leaves the opponent a way to close -- this is kiting,
+           not an unreachable treadmill. */
         const dd=Math.min(RNG*0.9,eRng+(RNG-eRng)*0.6),radial=Math.max(-1,Math.min(1,(d-dd)/40));
         stepDir(u,ux*radial,uy*radial,dt,uSpeed(u));
         return;
@@ -2771,13 +3083,19 @@ function uTick(u,dt){
       return;
     }
     else if(T.minRng&&d<T.minRng){
-      
+      /* A siege engine being closed down first looks for another target it can still
+         reach and keeps firing -- let the friendly units deal with whatever is in its
+         face. Only when the attacker is the last thing left does it retreat. Standing
+         firm also means not moving, so the setup is never interrupted. */
       const alt=siegeAlt(u,RNG,T.minRng);
       if(alt){u.tgt=alt;if(u.cd<=0&&siegeReady(u)){fire(u,alt);u.cd=T.cd*(S_(u.side).starving?1.33:1);}return;}
       if(stepDir(u,u.x-e.x,u.y-e.y,dt,uSpeed(u)))return;
     }
     else if(d>RNG){
-      
+      /* The chase leash is anchored to the ordered point (attack orders get more rope
+         than guard), which stops a group chasing one runner all the way into the enemy
+         base. A target the player picked explicitly is the exception: that is a
+         commitment, and it is followed however far it goes. */
       let chase;
       if(u.tgt===g.focus&&g.focus)chase=true;
       else if(engModel===2){
@@ -2870,7 +3188,9 @@ function separation(){
       if(dd<0.01){const th=((i*73+j*31)%628)/100;ux=Math.cos(th);uy=Math.sin(th);dd=0.01;} 
       else{ux=dx/dd;uy=dy/dd;}
       const o=(rad-dd)/rad,push=o*o*rad*0.5; 
-      
+      /* Shoving has resistance: the unit that is moving absorbs most of the separation,
+         the one standing still gives way only slightly. Total displacement is unchanged,
+         so separation is as fast as it ever was. */
       const mA=t-(a.movedT||0)<0.35,mB=t-(b.movedT||0)<0.35;
       let shA=1,shB=1;
       if(mA&&!mB){shA=1.7;shB=0.3;}else if(!mA&&mB){shA=0.3;shB=1.7;}
@@ -2882,7 +3202,7 @@ function separation(){
     sepApply(a,px,py);}
 }
 
-
+/* ============ 7b. Garrisoning ============ */
 function volUsed(b){let v=b.g||0;if(b.garr)for(const u of b.garr)v+=UT[u.type].vol;return v;}
 function garCap(b){return Math.floor(BT[b.type].cap*modOf(b.side).garCap);} 
 function canEnter(b,vol){
@@ -2890,7 +3210,8 @@ function canEnter(b,vol){
   if(!c||!b.done||b.hp<=0||b.hp<=b.maxHp*0.2)return false;
   return volUsed(b)+vol<=c;
 }
-
+/* Find a legal, unblocked spot at the same height around a building -- so units
+   leaving a garrison do not end up stuck or on the wrong level. */
 function placeAround(b){
   const bh=hgtI(idx(b.tx,b.ty));
   for(let r=1;r<=3;r++){
@@ -2917,7 +3238,14 @@ function exitGar(u){
   u.path=[];u.dest=null;u.tgt=null;
 }
 function releaseVillagers(b,scatter,minStay){ 
-  
+  /* A minimum stay, applied only to automatic release (manual eviction and a
+     critical building always empty immediately).
+     Automatic release triggers when nothing has been near *the building* for three
+     seconds -- but a raid hits the outlying resources, so with the enemy far from the
+     town centre that timer is already satisfied and villagers were released the same
+     tick they entered. Garrison counts peaked at zero and it looked like they could
+     not get in, when in fact they were being let straight back out, walking back to
+     the node, and being shot again. */
   let n=0;
   for(const v of villagers)if(v.garrisoned&&(v.garB===b||(!v.garB&&b.type==='tc'))){
     if(minStay&&t-(v.garT??-9)<minStay)continue;
@@ -2942,7 +3270,9 @@ function ejectAll(b,scatter){
   }
   if(any&&scatter&&b.side===0)alertMsg('yellow',STR.msg_eject);
 }
-
+/* Transports are garrisons that move: capacity is the sum of unit volumes, loading
+   and unloading crosses the land/water boundary, and a partial unload is fine when
+   there is not enough room ashore. */
 const transHold=T=>UT[T.type].hold||0;
 function transUsed(T){let v=0;if(T.cargo)for(const c of T.cargo)v+=UT[c.type].vol||1;return v;}
 function canBoard(T,vol){return T.hp>0&&transUsed(T)+vol<=transHold(T);}
@@ -2995,7 +3325,11 @@ function transTick(u,dt){
     if(!u.path.length){const np=uFP(u,p.x,p.y);if(np.length)u.path=np;else{u.unloadPt=null;return;}} 
     stepPath(u,dt);return;
   }
-  
+  /* Rendezvous for loading. A transport heads for the shore water nearest the units
+     waiting for it and stops once they are in loading range, rather than continuing
+     to the far bank -- which is how a transport and its passengers used to end up on
+     opposite sides of a dock forever. It only re-approaches while idle, so even a
+     crossing start converges instead of orbiting. */
   let bd=1e9,bo=null;
   for(const o of units)if(o.boardTgt===u&&o.hp>0){const d=Math.hypot(o.x-u.x,o.y-u.y);if(d<bd){bd=d;bo=o;}}
   if(bo){
@@ -3004,7 +3338,11 @@ function transTick(u,dt){
   }
   if(u.path.length)stepPath(u,dt); 
 }
-
+/* Single exit point for cancelling an ambush. Once ambush is set there should be
+   no follow-up input, so anything that touches the group or its members -- moving,
+   targeting, dragging, transferring, emptying a garrison, changing formation --
+   releases it back to guard. If the group panel is open it is redrawn on the spot,
+   so the ambush highlight cannot linger and suggest it is still armed. */
 function breakAmbush(g){
   if(!g||(g.task!=='ambush'&&!g.holdFire))return false;
   if(g.task==='ambush')g.task='guard';
@@ -3028,7 +3366,8 @@ function issueGarrison(ti,b,si){si=si||0;
   const g=tagsOf(si)[ti];g.seq++;g.pt={x:b.x,y:b.y};
   breakAmbush(g); 
   g.holdB=b; 
-  
+  /* Units already garrisoned are left alone, so a group can be split across several
+     towers. */
   const us=units.filter(u=>u.side===si&&u.grp===g&&u.hp>0&&!u.gar);
   for(const u of us){
     u.garTgt=b;u.tgt=null;u.wp=null;u.stunT=0;u.relocate=false;
@@ -3037,7 +3376,11 @@ function issueGarrison(ti,b,si){si=si||0;
   if(si===0){markers.push({x:b.x,y:b.y,t0:t,col:TAGCOL[ti]});
   sndClick();renderTagbar();}
 }
-
+/* Emptying a garrison, at group level: every member of the group inside a building
+   comes out. The player does it from the group panel; the AI calls the same
+   function rather than getting a private one.
+   It also clears the hold order, so "come out" really means out -- otherwise newly
+   trained members of the group would walk straight back in. */
 function issueGarrisonOut(ti,si){si=si||0;
   const g=tagsOf(si)[ti];
   breakAmbush(g); 
@@ -3048,10 +3391,21 @@ function issueGarrisonOut(ti,si){si=si||0;
     else if(u.garTgt){u.garTgt=null;u.path=[];u.anchor={x:u.x,y:u.y};} 
   }
 }
+/* The per-unit garrison order has been retired. It was the no-UI version of
+   dragging a single unit into a building, and the player has no such gesture --
+   which made it a capability the AI had and the player did not. Garrisoning is a
+   group-level order for both, and the AI command whitelist has no entry that the
+   player cannot press. */
 
-
-
-
+/* ============ 8. Buildings and projectiles ============ */
+/* Buildings shoot by real vision, like everything else: tree cover accumulates per
+   tile, so a tower sees the treeline but not the depths, and a unit exposed by its
+   own fire can be hit. The omniscience shortcut does not see through trees either,
+   so towers never snipe an ambush hidden in deep forest.
+   This used to differ by side -- one side's towers fired at remembered buildings,
+   the other's only at currently visible ones -- which was a third source of side
+   bias. Now both go through the same rule: remembered is enough for buildings,
+   currently visible is required for units. */
 function spotted(b,e){
   if(e.revealT>t)return true;
   const si=b.side||0,i=idx(txOf(e.x),tyOf(e.y));
@@ -3082,7 +3436,8 @@ function bTick(b,dt){
       }
       if(foes.length){
         if(!bldTgt)foes.sort((a,c)=>Math.hypot(a.x-b.x,a.y-b.y)-Math.hypot(c.x-b.x,c.y-b.y));
-        
+        /* A garrison adds arrows: archers count 3, everything else 1, and every 3 points
+           adds one arrow. */
         let aw=b.g||0;
         if(b.garr)for(const u of b.garr)aw+=u.type==='archer'?modOf(b.side).garArrow:1; 
         const vol=1+Math.floor(aw/3);
@@ -3158,7 +3513,10 @@ function shotTick(s,dt){
   if(s.kind==='arrow'){
     if(!s.tgt||s.tgt.hp<=0||s.tgt.gar){s.dead=true;return;}
     if(s.hd===undefined){s.hd=Math.atan2(s.tgt.y-s.y,s.tgt.x-s.x);s.flown=0;s.maxD=Math.max(220,Math.hypot(s.tgt.x-s.x,s.tgt.y-s.y)+60);} 
-    
+    /* Projectiles turn at a limited rate instead of homing, so a fast target that
+       changes direction sharply can make an arrow miss. Dodging by movement stays a
+       property of what you can see happening, and neither the evasion nor the damage
+       model is involved. */
     let want=Math.atan2(s.tgt.y-s.y,s.tgt.x-s.x),adiff=want-s.hd;
     while(adiff>Math.PI)adiff-=2*Math.PI;while(adiff<-Math.PI)adiff+=2*Math.PI;
     const mt=ARROW_TURN*dt;s.hd+=Math.max(-mt,Math.min(mt,adiff));
@@ -3168,7 +3526,8 @@ function shotTick(s,dt){
       s.dead=true;
       const e=s.tgt;
       if(s.src&&!e.size){e.lastHitBy=s.src;e.lastHitT=t;} 
-      
+      /* Evasion: a moving unit has a speed-dependent chance to dodge an arrow (3% while
+         standing). Buildings are always hit. Ranged defence is subtracted after a hit. */
       let hitP=1;
       if(!e.size){
         const mv=e.movedT&&t-e.movedT<0.25;
@@ -3184,7 +3543,11 @@ function shotTick(s,dt){
     const d=moveToward(s,s.tx,s.ty,s.sp,dt);
     if(d<6){
       s.dead=true;
-      
+      /* Splash falls off with distance: the unit at the point of impact takes full
+         damage, and it drops linearly to 40% at the edge of the blast. That is the real
+         benefit of a loose formation -- spread units are mostly at the edge of the blast
+         rather than simply outside the radius. Buildings take no falloff, which keeps
+         siege-versus-wall balance where it was. */
       const fall=dist=>1-(1-SPLASH_EDGE)*Math.min(1,dist/s.splash);
       
       for(const u of units)if(u.hp>0&&!u.gar){const dc=Math.hypot(u.x-s.tx,u.y-s.ty);if(dc<s.splash){
@@ -3201,14 +3564,23 @@ function shotTick(s,dt){
   }
 }
 
-
-
+/* ============ 8b. Scouts (mode-driven units, outside the group system) ============ */
+/* Safety ring: the range of enemy defensive buildings this side has actually seen,
+   plus a buffer -- a tower nobody has laid eyes on is not avoided by clairvoyance.
+   Both "enemy" and "seen" are relative to the scout's own side; the old code had
+   them hard-coded, so one side's scouts avoided their own towers and ignored the
+   opponent's. */
 function scoutUnsafe(x,y,si){si=si||0;
   for(const b of buildings)if(b.side!==si&&b.hp>0&&seenBy(b,si)&&BT[b.type].rng
     &&Math.hypot(b.x-x,b.y-y)<BT[b.type].rng+45)return true;
   return false;
 }
-
+/* Once the map is explored, scouts roam: pick a random explored, walkable tile
+   outside any known defensive fire and wander to it. This replaced standing at the
+   enemy's door, which either got the scout killed or parked it somewhere it could
+   see nothing, and it keeps map-wide intelligence fresh without ever walking into
+   fire that is already known about. Taking a deliberate look at the enemy base is
+   a separate, explicitly dispatched scout. */
 function aiScoutRoamPt(s,si){
   const exp=si===0?explored:exploredE,unr=si===0?unreachable:unreachableE;
   for(let k=0;k<12;k++){
@@ -3224,7 +3596,13 @@ function aiScoutRoamPt(s,si){
 }
 function nearestUnexplored(x,y,si,phase){si=si||0;
   const exp=si===0?explored:exploredE,unr=si===0?unreachable:unreachableE; 
-  
+  /* Exploration: scouts are sent out and left to it. Each claims a fixed wedge
+     around the home base and heads for the nearest unexplored frontier inside it,
+     widening only once its own wedge is done. The phase offset per scout is a golden
+     angle, so several scouts split the map instead of piling onto the same tile.
+     The wedge deliberately does not rotate with time: it used to, and a rotating
+     cone made scouts wander the map in zigzags while overlapping cones sent them all
+     to the same place. */
   const hub=aiHub(si),hx=hub?hub.x:x,hy=hub?hub.y:y;
   const heading=(si?Math.PI:0)+(phase||0); 
   const ctx0=txOf(x),cty=tyOf(y);
@@ -3243,7 +3621,10 @@ function nearestUnexplored(x,y,si,phase){si=si||0;
   }
   return null;
 }
-
+/* Fallback exploration targets: circle known enemy buildings at a safe distance to
+   keep the picture fresh, and revisit whichever explored tile has gone longest
+   without an update so an enemy cannot vanish by hiding in one. Together they mean
+   scouting never stops, even on a fully explored map. */
 function intelTarget(s){
   const si=s.side||0,exp=si===0?explored:exploredE,lsT=si===0?lastSeenT:lastSeenTE;
   let c=null,cd=1e9,safeR=120;
@@ -3293,7 +3674,7 @@ function sTick(s,dt){
     if(isLegalPosition(s,nx,ny)){s.x=nx;s.y=ny;s.movedT=t;}
     s.dest=null;s.path=[];
   };
-  
+  /* The nearest enemy defensive building this side has seen -- its threat ring. */
   let twr=null,twd=1e9;
   for(const b of buildings)if(b.side!==si&&b.hp>0&&seenBy(b,si)&&BT[b.type].rng){
     const d=Math.hypot(b.x-s.x,b.y-s.y);if(d<twd){twd=d;twr=b;}}
@@ -3382,7 +3763,8 @@ function sTick(s,dt){
       const d=Math.hypot(s.quarry.x-s.x,s.quarry.y-s.y);
       if(d<215)fleeFrom(s.quarry.x,s.quarry.y);
       else if(d>300){
-        
+        /* If the next step would enter the danger ring, stop at the nearest safe point
+           rather than keep trying: otherwise the scout oscillates on the boundary. */
         const nx=s.x+(s.quarry.x-s.x)/d*sp*dt,ny=s.y+(s.quarry.y-s.y)/d*sp*dt;
         if(!scoutUnsafe(nx,ny,si))vGoto(s,s.quarry.x,s.quarry.y,sp,dt);
         else{s.path=[];s.dest=null;}
@@ -3402,7 +3784,7 @@ function sTick(s,dt){
   }
 }
 
-
+/* ============ 9. Enemy AI ============ */
 const AIW=[
   {at:70, comp:{spear:2},via:'south'},
   {at:170,comp:{spear:3,archer:2},via:'north'},
@@ -3424,7 +3806,9 @@ function aiSpawnDef(){
 function aiSpawnWave(w){
   stats.wavesSeen++;
   const grp={task:'attack',rule:'counter',pt:{x:playerTC.x,y:playerTC.y},focus:null,seq:0,side:1};
-  
+  /* Waypoints, derived from map size and the enemy town centre so they work on every
+     map: north and south routes go around the lake, the centre route crosses via the
+     island, so bridges and fords actually carry traffic. */
   const vias={south:{x:16.5*TILE,y:(TH-5)*TILE},north:{x:16.5*TILE,y:4*TILE},
     center:{x:(((TW/2)|0)+0.5)*TILE,y:((((5+TH-6)/2)|0)+0.5)*TILE}};
   const via=vias[w.via]||vias.south;
@@ -3433,7 +3817,19 @@ function aiSpawnWave(w){
     u.wp=[{x:via.x+(rng()*2-1)*50,y:via.y+(rng()*2-1)*50},{x:playerTC.x,y:playerTC.y}];
   }
 }
-
+/* ============ 9b0. Demand scoring: one plan pool, a commitment set, multi-resource
+   reservations and income allocation ============
+   This replaced four separate brains with a fixed priority order and four
+   generations of ad-hoc savings patches.
+   Each economy or strategy tick, every domain throws candidates into the pool with
+   a score (domain weight x urgency, computed only from facts about the game).
+   Candidates pass a gate in score order into the commitment set: cheap ones reserve
+   their full cost immediately, expensive ones open a savings bucket fed by income.
+   Once affordable they execute and leave the set.
+   The hard-won rules behind it: reservations bind at the spending end, so
+   non-committed spending cannot dip into them; a reservation must correspond to
+   something that will really be built; and there can only ever be one savings
+   bucket at a time, or every surplus is swallowed by the next bucket forever. */
 const AI_EXP_KEYS=new Set(['age','bld:castle']); 
 const AI_HYST=1.5;      
 const AI_INC_SHARE=0.6; 
@@ -3524,7 +3920,11 @@ function aiCommitExec(si){
     }
     a.cmt.push({key:p.key,dom:p.dom,cost:p.cost,bucket:{},exp:p.exp,trickle:p.trickle,score:p.score,exec:p.exec,gate:p.gate,bornT:t,seen:t});
   }
-  
+  /* Execution follows score rank: only a higher-scoring item that has not executed
+     yet can block you, so a low-priority reservation can never hold up a
+     high-priority one. Opportunistic items join the same ranking -- done if
+     affordable, reserving nothing if not. At most one building is placed per tick,
+     which keeps the AI's build-out paced rather than bursty. */
   const stk=stockOf(si),order=[...a.cmt,...ops].sort((x,y)=>y.score-x.score||(x.key<y.key?-1:1)),above={};
   let builtOne=false;
   for(const c of order){
@@ -3554,11 +3954,28 @@ function aiCommitExec(si){
   }
   a.pool.length=0;
 }
-
+/* ============ 9b. AI economy: a player that follows the rules ============
+   It acts only through the same command whitelist the player has: train villagers,
+   shift the gathering split, add farms and coppices, put up markets, barracks and
+   monasteries, research, advance an age, trade at the market, expand with outposts.
+   Affordability, placement, unlock, age and civilisation-exclusivity gates apply to
+   it exactly as they do to the player, and gathering, building and fleeing run
+   through the same villager code -- including a symmetric danger map.
+   Economy decisions tick about every 2s, strategy about every 10s, and every random
+   draw comes from the seeded generator, so the same seed replays the same game. */
 const AI_ECO={dockVill:10,fishMax:3,trapMax:3,islandVill:14}; 
-
+/* Map feature extraction: the single source for villager targets, tower counts and
+   outpost caps.
+   Gatherable amount inside the economic radius gives the number of gatherers the
+   land can support; buildable free tiles give the cap on renewable sources. The
+   earlier version scaled those caps by villager count, which was circular --
+   villager target raised the farm cap, which raised the villager target. */
 const AI_MAPP={perVill:1400,farmK:0.014,copK:0.009,clusR:6,useR:9,cache:15,castleStone:2500,castleVill:30};
-
+/* The calibration constants live here rather than in the difficulty table, because
+   difficulty is not allowed to state quantities of buildings. A castle, for
+   instance, is gated on how much natural stone its economic radius can actually
+   supply -- far more than its bare price, since towers and walls draw on the same
+   stone. */
 function aiMapFeat(si,force){
   si=si===undefined?1:si;
   const a=A(si);
@@ -3568,7 +3985,7 @@ function aiMapFeat(si,force){
   a.feat=f;a.featT=t;
   if(!hub)return f;
   const hc=landComp?landComp[idx(txOf(hub.x),tyOf(hub.y))]:-1;
-  
+  /* 1. Gatherable amount inside the radius, plus ore outside it, in one pass. */
   const outN=[];
   for(const n of nodes){
     if(n.farm||n.sea||n.amt<=0||n.fSide!==undefined)continue;
@@ -3586,7 +4003,8 @@ function aiMapFeat(si,force){
   }
   f.farmCap=Math.max(4,Math.round(f.bldFree*AI_MAPP.farmK));
   f.copCap=Math.max(2,Math.round(f.bldFree*AI_MAPP.copK));
-  
+  /* 3. Ore clusters outside the radius, merged greedily, each cluster's centre
+     following its members: how many places are worth expanding to. */
   const cl=[];
   for(const n of outN){
     let hit=null;
@@ -3595,7 +4013,10 @@ function aiMapFeat(si,force){
     else cl.push({x:n.x,y:n.y,n:1});
   }
   f.clusters=cl.length;
-  
+  /* 4. Points worth defending: the home approach, resource areas actually being
+     worked, and outposts. An area also qualifies after being raided twice -- during a
+     raid the villagers have already fled, so "is anyone working here" is false at
+     exactly the moment a tower is most needed. */
   const areas={},hthr=aiHarassThr(si);
   for(const k in a.harassAt)if(a.harassAt[k].n>=hthr)areas[k]=2;
   for(const v of villagers){
@@ -3622,7 +4043,9 @@ function aiTowerCap(si){
   if(d.towers>=2)n+=f.defMines;
   if(d.towers>=3)n+=f.defOuts;
   return n;}
-
+/* Castles are capped by the stone economy and the number of defensible points, not
+   by a number in the difficulty table. The difficulty tier only says how ambitious
+   to be: never, capital only, or capital plus anything worth permanently holding. */
 function aiCastleCap(si){
   const d=aiD(si);if(!d.castle)return 0;
   const f=aiMapFeat(si);
@@ -3630,17 +4053,28 @@ function aiCastleCap(si){
   if(d.castle>=2)pts+=f.defMines+f.defOuts;                
   const stoneK=Math.floor(f.stoneAmt/AI_MAPP.castleStone); 
   return Math.max(0,Math.min(pts,stoneK));}
-
+/* Timing is gated on the building's own age requirement plus an economic
+   threshold and having already survived a first attack -- not on the name of an
+   age. The old code required a further age beyond the unlock, which in practice
+   meant almost never: that extra gate, not a missing wire, is why the castle logic
+   looked dead for so long. */
 function aiCastleTime(si){
   const a=A(si);
   if(!buildingUnlocked('castle',si))return false;
   if(!(a.defAcc>0||a.offAcc>0))return false;
   return villagers.filter(v=>alive(v)&&(v.side||0)===si).length>=AI_MAPP.castleVill;}
-
+/* Shared predicate: the fortification logic (should we build one) and the market
+   (should we stockpile stone for one) must use the same test, or the market
+   stockpiles stone for a castle that is not yet allowed to exist. */
 const aiCastleWant=si=>{const d=aiD(si);
   return !!d.castle&&aiCastleTime(si)
     &&buildings.filter(b=>b.side===si&&b.hp>0&&b.type==='castle').length<aiCastleCap(si);};
-
+/* Towers have three reactive triggers -- the home rally point, a resource area
+   raided twice, and a new outpost. No trigger means no tower is wanted right now.
+   This is shared rather than duplicated because the savings logic once only checked
+   "towers < cap" without asking whether there was anywhere to put one: it reserved
+   stone for a tower that could never be built, villagers were permanently diverted
+   to quarrying, and age advancement stalled for the whole game. */
 function aiHarassThr(si){const lv=A(si).diff;return lv==='noob'?4:lv==='normal'?3:2;} 
 function aiTowerSpot(si,vills){
   const a=A(si);
@@ -3650,7 +4084,10 @@ function aiTowerSpot(si,vills){
   for(const b of buildings)if(b.side===si&&b.hp>0&&b.type==='outpost'&&!aiBldNear(si,'tower',b.x,b.y,4))return b;
   return null;
 }
-
+/* Four generations of ad-hoc savings patches -- for docks, siege workshops,
+   coppices and towers -- were retired into the commitment set. The same root cause
+   had been patched four times. Reservations are now one multi-resource vector, and
+   nothing outside the pool can spend into them. */
 function aiHub(si){return buildings.find(b=>b.side===si&&b.done&&b.hp>0&&BT[b.type].prod==='full')
   ||buildings.find(b=>b.side===si&&b.done&&b.hp>0&&BT[b.type].prod);} 
 function aiFindSpot(si,type,ax,ay,rMax){ 
@@ -3682,7 +4119,8 @@ function aiEcoTick(si){
   const vills=villagers.filter(v=>alive(v)&&(v.side||0)===si);
   if(!AI_SEA.ready)aiSeaInit();
   aiIncomeTick(si); 
-  
+  /* 1. Train villagers: a target per age, adjusted by difficulty and opening
+     template (rush fewer, boom more), with a self-limiting queue. */
   const vTarget=aiVillT(si,T.age);
   if(vills.length+cqCount('villager',si)<vTarget&&(hub.cq?hub.cq.length:0)<2)
     aiNeed(si,'unit:vill','eco',1.4+(vTarget-vills.length)/vTarget,VIL.cost,()=>AICMD.trainVillager(hub));
@@ -3695,7 +4133,9 @@ function aiEcoTick(si){
    if(aS.stuck&&AI_SCOUTROAM)wantScout=Math.max(wantScout,1); 
    if(nSc<wantScout&&BT[hub.type].prod==='full'&&(hub.cq?hub.cq.length:0)<2)
      aiNeed(si,'unit:scout','intel',urg,SCT.cost,()=>AICMD.trainScout(hub));}
-  
+  /* 2. Gathering split follows the shortfall: the target stock is the baseline plus
+     the unpaid cost of everything committed, so villagers lean towards whatever is
+     missing. */
   const want={food:220,wood:180,gold:100,stone:60,iron:30};
   if(T.age>=2){want.iron=90;want.stone=100;} 
   {const up=sd.curUpkeep; 
@@ -3706,7 +4146,9 @@ function aiEcoTick(si){
     const deficit=Math.max(0,(want[k]-(stk[k]||0))/want[k]);
     AICMD.setShare(si,k,+(0.15+deficit*1.85).toFixed(2)); 
   }
-  
+  /* 3. Farms and coppices for sustainability: when a natural resource inside the
+     radius runs out, build a renewable source -- villagers walk over and build it,
+     under the same rules as the player's. */
   const natLeft=k=>aiNatLeft(si,k);
   const myB=tp=>buildings.filter(b=>b.side===si&&b.hp>0&&b.type===tp).length;
   
@@ -3722,9 +4164,13 @@ function aiEcoTick(si){
     }
     if(mk)AICMD.markForest(si,txOf(mk.x),tyOf(mk.y),true);
   }
-  
+  /* The cap on farms and coppices is what the map can carry, derived from buildable
+     space rather than from villager count. */
   let fCap=aiFarmCap(si),cCap=aiCopCap(si);
-  
+  /* At higher difficulties the cap also scales with villager count, so gatherers left
+     idle by an exhausted resource are absorbed into renewable sources instead of
+     standing around. Anchors extend to outposts and cities, so building continues at
+     the expansions once home is full. */
   const rgVill=AI_SQUADS&&AI_REGROW&&aiD(si).regrow==='vill';
   if(rgVill){fCap=Math.max(fCap,Math.ceil(vills.length*AI_RG_F));cCap=Math.max(cCap,Math.ceil(vills.length*AI_RG_C));}
   const rgSpot=tp=>{let s=aiFindSpot(si,tp,hub.x,hub.y,14);
@@ -3741,7 +4187,12 @@ function aiEcoTick(si){
       {gate:()=>!!rgSpot('farm')});
   
   if(buildings.some(b=>b.side===si&&b.done&&b.hp>0&&b.type==='market')){
-    
+    /* Actively trading for what the military needs. Gold used to pile up past 3000
+       while stone sat at 150 -- never quite enough for a castle -- because natural stone
+       and iron are far away and slow to gather.
+       So stone for a castle and iron for catapults count as military target resources:
+       they are not sold off as surplus, and spare gold buys them in, one lot at a time,
+       bounded by the target amount and a price ceiling. */
     const wantCastle=d.mkt==='balance'&&aiCastleWant(si); 
     const wantSiege=d.mkt==='balance'&&AI_RB.siege&&unitUnlocked(AI_RB.siege,si)&&(A(si).state==='pressure'||A(si).state==='allin');
     const buyMil=(k,goal)=>{if((stk[k]||0)>=goal)return false;
@@ -3759,7 +4210,8 @@ function aiEcoTick(si){
       else{
         let sellK=null,best=0;
         for(const r of RES){const k=r.k;if(k==='gold')continue;
-          
+          /* Military target resources are protected only up to the target amount; anything
+             beyond that is genuine surplus and may be sold, so a real glut is not hoarded. */
           const goalK=(k==='stone'&&wantCastle)?BT.castle.cost.stone:(k==='iron'&&wantSiege)?(UT[AI_RB.siege].cost.iron||0)*2:0;
           const sur=(stk[k]||0)-Math.max((want[k]||0)*d.mktBal,goalK);
           if(sur>best){best=sur;sellK=k;}}
@@ -3771,7 +4223,13 @@ function aiEcoTick(si){
   if(AI_SEA.hasWater)aiSeaEco(si,T,stk,vills.length);
   
   if(!T.track&&!T.queue.length){
-    
+    /* Research hunger. Under sustained fighting, military spending strips wood and gold
+       every few seconds, so opportunistic research never gets funded and unit unlocks
+       like siege and healing never happen in a real game.
+       The fix is a single event-triggered promotion: when the military brain wants a
+       unit whose unlock is missing, that research (and one missing prerequisite at a
+       time) is promoted to an income-fed bucket. At most one bucket exists at a time --
+       the unbounded version of this made the AI markedly worse. */
     const hg=aiTechHunger(si,T);
     if(hg){const tch=techById(hg);
       aiNeed(si,'tech:'+hg,'tech',1.6,techCost(tch),()=>AICMD.research(si,hg),{exp:true,trickle:true});}
@@ -3802,7 +4260,10 @@ function aiEcoTick(si){
    }}
   aiCommitExec(si); 
 }
-
+/* Research order: economic core first, then the military line (ranged attack,
+   cavalry, siege, attack/defence upgrades, medics), with the naval line inserted
+   only once there is a dock. Personality and counter picks are pushed to the front;
+   anything whose prerequisites are unmet is skipped naturally. */
 function aiTechHunger(si,T){ 
   const a=A(si),st=a.state,d=aiD(si);
   if(T.age<2)return null;                                  
@@ -3836,7 +4297,12 @@ function aiTechLine(si,T){
   const core=hasDock?['E1','E2','S1','F1','N1','M3','U1','N2','M1','S2','N3','U2','M2','S3','M4','U3']
                     :['E1','E2','S1','F1','M3','U1','M1','S2','U2','M2','S3','M4','U3'];
   const pre=[];
-  
+  /* Counter-pivot: once the opponent's civilisation has been identified, research
+     leans towards the line that counters it.
+     This looks like a bug and measurably is not: with the civilisation read disabled,
+     the hardest AI's win rate fell from 40% to 25%. An earlier attempt to move the
+     counter line after the economic core, based on a smaller sample, made things
+     worse and was reverted -- read the sample sizes before touching it again. */
   const gRow=d.civRead&&a.civGuess&&AI_CIVROW[a.civGuess];
   if(gRow)pre.push(...gRow.ai.ctrTech); 
   if(cai)pre.push(...cai.pre);
@@ -3865,7 +4331,8 @@ function aiStratTick(si){
   
   if(!T.ageUp&&AGES[T.age]&&canAdvanceAge(si))
     aiNeed(si,'age','tech',2.0,AGES[T.age].cost,()=>AICMD.ageUp(si));
-  
+  /* Enemies at the door means fight first, do not build through it: construction
+     villagers die and new buildings block your own movement. */
   const homeSiege=!!(a.thr&&Math.hypot(a.thr.x-hub.x,a.thr.y-hub.y)<TILE*9);
   
   for(const tp of ['barracks','smith','stable','dock'])if(myB(tp))a.had[tp]=true;
@@ -3877,7 +4344,11 @@ function aiStratTick(si){
       ()=>rb==='dock'?(()=>{const s=aiDockSpot(si);return s?!!AICMD.place(si,'dock',s.tx,s.ty):false;})():placeAt(rb,hub.x,hub.y),
       {gate:()=>rb==='dock'?!!aiDockSpot(si):!!aiFindSpot(si,rb,hub.x,hub.y,9)});
   }
-  
+  /* A monastery is wanted for either of two independent reasons (same key, same
+     score, so it enters the pool once): it satisfies the building requirement for
+     advancing an age, and it is the entire bottleneck for medics -- the medic unlock
+     has no prerequisites and sits at the monastery, so "research it earlier" was
+     never the answer; having somewhere to research it was. */
   {const MD=AI_RB.support,dMed=aiD(si);
    const needAge=T.age===2&&!buildings.some(b=>b.side===si&&b.hp>0&&BTIER[b.type]===2);
    const needMed=AI_MEDPROD&&!!dMed.tactics&&MD&&!unitUnlocked(MD,si)&&T.age>=2
@@ -3887,7 +4358,11 @@ function aiStratTick(si){
   
   if(!myB('market')&&vills>=10)
     aiNeed(si,'bld:market','eco',0.9,BT.market.cost,()=>placeAt('market',hub.x,hub.y),{gate:spotAt('market',hub.x,hub.y)});
-  
+  /* Expansion sites: bare ore outside the economic radius that is reachable and
+     closer to us than to the enemy, with an outpost next to it to push the radius out.
+     The trigger is graded by difficulty, from passive (only once the home radius is
+     exhausted) through reactive and proactive to contested, where sites nearer the
+     enemy are acceptable. */
   const dTab=aiD(si);
   if(vills>=12&&!(AI_SQUADS&&AI_DIFFTAB&&dTab.outEn===false)){ 
     const emode=dTab.expand||'reactive';
@@ -3946,7 +4421,14 @@ function aiStratTick(si){
   if(!homeSiege)aiFortNeeds(si,hub,T,stk,vills);
   aiCommitExec(si); 
 }
-
+/* ============ 9c. AI fortifications: towers, walls and gates, castles ============
+   Before this the AI built no defences at all -- not broken, simply absent from its
+   build list.
+   Everything here is reactive, because a player who follows the rules does not tower
+   rush: towers go at the home approach, at a resource area raided twice, or beside
+   a new outpost; walls and a gate go up at the nearest chokepoint on our side only
+   after a full minute of cumulative defending; castles need stone that is genuinely
+   spare. Every placement goes through the player command path. */
 const aiBldNear=(si,tp,x,y,rTile)=>buildings.some(b=>b.side===si&&b.hp>0&&b.type===tp&&Math.hypot(b.x-x,b.y-y)<TILE*rTile);
 function aiWallSpot(si){ 
   const a=A(si),hub=aiHub(si),r=a.routes[0];
@@ -3958,7 +4440,10 @@ function aiWallSpot(si){
   let dx=p1.x-p0.x,dy=p1.y-p0.y;const dl=Math.hypot(dx,dy)||1;dx/=dl;dy/=dl;
   const px=-dy,py=dx;                    
   const vert=Math.abs(py)>Math.abs(px),ori=vert?'v':'h',gfp=fpOf('gate',ori);
-  
+  /* A gate is two tiles and its footprint always grows towards +x/+y, so a
+     chokepoint tile right at the edge of a gap puts the second tile into a wall or a
+     cliff. The anchor therefore tries the chokepoint tile and one tile back -- a
+     two-tile gap is exactly wide enough to take a gate. */
   let g=null;
   for(const [ax,ay] of (vert?[[c.tx,c.ty],[c.tx,c.ty-1]]:[[c.tx,c.ty],[c.tx-1,c.ty]]))
     if(ax>=0&&ay>=0&&canPlace('gate',ax,ay,ori,si)){g={tx:ax,ty:ay,ori};break;}
@@ -3987,7 +4472,10 @@ function aiFortNeeds(si,hub,T,stk,vills){
            const s=aiFindSpot(si,'tower',sp.x,sp.y,4);return s?!!AICMD.place(si,'tower',s.tx,s.ty):false;},
       {gate:()=>{const sp=aiTowerSpot(si,vills);return !!(sp&&aiFindSpot(si,'tower',sp.x,sp.y,4));}});
   }
-  
+  /* Walls and gates are personality-driven: a rushing civilisation never builds them,
+     a turtling one builds pre-emptively, and everything in between waits until it has
+     spent enough time on the defensive. Only the nearest chokepoint on our own side
+     is closed, and the gate stays on the main road. */
   const st=aiStyle(si)||{},wm=st.wallMode||'reactive',wallAge=st.wallAge||2;
   if(d.wall&&wm!=='never'&&T.age>=wallAge&&(wm==='proactive'||a.defAcc>=60)&&buildingUnlocked('gate',si)){
     if(!a.wall)a.wall=aiWallSpot(si);
@@ -4010,13 +4498,20 @@ function aiFortNeeds(si,hub,T,stk,vills){
       {gate:()=>!!aiFindSpot(si,'castle',anchor.x,anchor.y,6)});
   }
 }
-
+/* ============ 9d. AI navy: using the water on water maps ============
+   Map annotation runs once per map (water regions, fishery zones, buildable shore,
+   islands needing transport); the economy branch builds docks, fishing boats and
+   traps; the military branch runs the fleet as a group with its own
+   rock-paper-scissors composition, escorting fishing boats, blockading fords,
+   shelling the shore and retreating to port; and transports contest islands. */
 const AI_SEA={ready:false,hasWater:false,comp:null,zones:[],ores:[]};
 function aiSeaInit(){ 
   AI_SEA.ready=true;AI_SEA.zones=[];AI_SEA.ores=[];AI_SEA.comp=null;
   let hw=false;for(let i=0;i<TW*TH;i++)if(terr[i]===T_WATER){hw=true;break;}
   AI_SEA.hasWater=hw;if(!hw)return;
-  
+  /* Water connectivity, mirroring the land version. Shallows are navigable -- they
+     are a strait, not a wall -- and the regions define fishery zones and where a
+     fleet can operate. */
   const wc=new Int32Array(TW*TH).fill(-1),sail=i=>terr[i]===T_WATER||terr[i]===T_SHALLOW;
   let c=0;
   for(let s=0;s<TW*TH;s++){
@@ -4029,13 +4524,15 @@ function aiSeaInit(){
     c++;
   }
   AI_SEA.comp=wc;
-  
+  /* Fishery zones: sea-food nodes clustered by water region, the centroid serving as
+     a patrol and escort anchor. */
   const zm=new Map();
   for(const n of nodes){if(!n.sea||n.farm)continue;const k=wc[idx(txOf(n.x),tyOf(n.y))];if(k<0)continue;
     if(!zm.has(k))zm.set(k,[]);zm.get(k).push(n);}
   for(const [k,ns] of zm){let x=0,y=0;for(const n of ns){x+=n.x;y+=n.y;}
     AI_SEA.zones.push({c:k,nodes:ns,x:x/ns.length,y:y/ns.length});}
-  
+  /* Land regions holding bare ore are expansion targets. "Island" simply means a
+     region other than the one our own hub is in, evaluated per side at query time. */
   const om=new Map();
   for(const n of nodes){
     if(n.sea||n.farm||n.amt<=0||n.forestI!==undefined)continue;
@@ -4098,7 +4595,8 @@ function aiSeaEco(si,T,stk,vills){
   }
   const dock=docks.find(b=>b.done);if(!dock)return;
   const z=aiZoneOf(dock.x,dock.y);if(!z)return;
-  
+  /* Training fishing boats goes through the command whitelist like everything else:
+     the zone must have fish and be under its cap. */
   const fishN=units.filter(u=>u.side===si&&u.hp>0&&u.type==='fishing').length
     +buildings.reduce((n,b)=>n+(b.side===si?b.queue.filter(q=>q.type==='fishing').length:0),0);
   if(aiZoneAmt(z,si)>0&&fishN<AI_ECO.fishMax&&dock.queue.length<2){
@@ -4114,7 +4612,9 @@ function aiSeaEco(si,T,stk,vills){
   if(Math.hypot(fb.x-spot.x,fb.y-spot.y)<TILE*0.6){fb.manualDest=null;AICMD.deployTrap(fb);}
   else if(!fb.manualDest||Math.hypot(fb.manualDest.x-spot.x,fb.manualDest.y-spot.y)>TILE)AICMD.moveShip(si,fb,spot.x,spot.y);
 }
-
+/* Individual ship movement -- the equivalent of the player dragging one ship, and
+   the only way the AI is allowed to move one. Writing coordinates directly is not
+   permitted. */
 function moveShipCmd(u,x,y){
   if(!u||u.hp<=0||u.dom!=='water')return false;
   if(u.grp)breakAmbush(u.grp); 
@@ -4122,7 +4622,8 @@ function moveShipCmd(u,x,y){
   if(UT[u.type].fish){const w=nearestWaterXY(x,y)||{x,y};u.manualDest={x:w.x,y:w.y};u.node=null;u.fleeing=false;u.path=[];u.nudge=null;return true;} 
   nudgeTo(u,x,y);return true; 
 }
-
+/* Naval combat triangle: fire ships beat galleys, galleys beat siege ships, siege
+   ships beat fire ships. The fleet is one group. */
 const AI_NAVYTYPES=new Set(['galley','fireship','siegeship']);
 const isNavyMil=u=>u.hp>0&&!u.gar&&u.dom==='water'&&AI_NAVYTYPES.has(u.type);
 const AI_NAVYCAP={develop:4,defend:6,pressure:8,allin:12};
@@ -4177,7 +4678,8 @@ function aiNavyTick(si){
   if(!AI_SEA.hasWater)return;
   const dock=buildings.find(b=>b.side===si&&b.done&&b.hp>0&&b.type==='dock');
   const myShips=units.filter(u=>u.side===si&&isNavyMil(u));
-  
+  /* Enemy ship sightings, with the same slow-decaying memory as the land army and
+     through the same vision gate -- the AI never peeks. */
   const foeShips=units.filter(u=>u.side!==si&&u.dom==='water'&&u.hp>0&&!u.gar&&aiSeesU(si,u));
   const cur={};for(const u of foeShips)cur[u.type]=(cur[u.type]||0)+1;
   for(const k of ['galley','fireship','siegeship','transport','fishing'])
@@ -4187,7 +4689,9 @@ function aiNavyTick(si){
   if(!myShips.length)return;
   const myStr=myShips.reduce((s,u)=>s+uStr(u),0);
   const cx=myShips.reduce((s,u)=>s+u.x,0)/myShips.length,cy=myShips.reduce((s,u)=>s+u.y,0)/myShips.length;
-  
+  /* Retreat test, same as the land army and read from the difficulty knobs: if the
+     enemy-to-friendly ratio within 380px of the centroid passes the threshold, pull
+     back to the dock, where ships repair. */
   const rr=aiRetreatR(si);
   const lf=foeShips.filter(e=>Math.hypot(e.x-cx,e.y-cy)<380).reduce((s,u)=>s+uStr(u),0);
   if(rr&&lf>myStr*rr&&dock&&t>a.navyRetreatT+18){
