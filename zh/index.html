@@ -4699,7 +4699,8 @@ function aiNavyTick(si){
     if(w){aiOrder(si,AI_G.navy,w.x,w.y,'guard');return;}
   }
   if(t<a.navyRetreatT+10)return; 
-  
+  /* Escorting comes first: an enemy ship sighted within nine tiles of our fishing
+     boats, transports or fisheries gives the fleet an intercept point. */
   const assets=units.filter(u=>u.side===si&&u.hp>0&&!u.gar&&(u.type==='fishing'||u.type==='transport'));
   let tx=0,ty=0,ts=0;
   for(const e of foeShips){
@@ -4712,7 +4713,12 @@ function aiNavyTick(si){
   if(AI_SEACOORD&&a.navyCall&&t-a.navyCall.t<AI_CALL_T
      &&aiSeaComp(a.navyCall.x,a.navyCall.y)===aiSeaComp(cx,cy)&&myStr>=foeStr*0.8){
     aiOrder(si,AI_G.navy,a.navyCall.x,a.navyCall.y,'guard');return;}
-  
+  /* Sea control: a strong enough fleet shells the shore, blockades the fords a land
+     army has to cross, and hunts the enemy's fisheries.
+     At the highest difficulties this doubles as a second front -- while the main army
+     is committed, the fleet presses at the point furthest from it, and the threshold
+     for acting drops so that parity is enough to try. Lower difficulties keep the
+     safety margin and shell only near their own coast. */
   const twoFront=AI_SEACOORD&&aiD(si).scout==='active'&&(a.state==='pressure'||a.state==='allin')&&!!a.mission;
   if(myStr>=Math.max(2,foeStr*(twoFront?1.0:1.3))){
     
@@ -4730,12 +4736,14 @@ function aiNavyTick(si){
       if(tgt){aiOrder(si,AI_G.navy,tgt.x,tgt.y,'attack',null);return;}
     }
   }
-  
+  /* With nothing to do, patrol our own fishery zone; with no fishery, sit by the
+     dock and repair. */
   const z=dock?aiZoneOf(dock.x,dock.y):AI_SEA.zones[0];
   if(z)aiOrder(si,AI_G.navy,z.x,z.y,'guard');
   else if(dock){const w=dockLaunch(dock)||nearestWaterXY(dock.x,dock.y);if(w)aiOrder(si,AI_G.navy,w.x,w.y,'guard');}
 }
-
+/* Island grabs by transport: a multi-step state machine that abandons the mission
+   if any phase stalls for a minute, so it cannot loop forever. */
 const AI_ISL_TO=60;
 function aiIslandStart(si){ 
   if(A(si).island||!AI_SEA.hasWater||!landComp)return;
@@ -4803,10 +4811,18 @@ function aiIslandTick(si){
     return;
   }
 }
-
+/* ============ 9c. AI military brain ============
+   The AI's army is produced by its own barracks, stables and workshops through the
+   player command path -- unlock, age, starvation and cost gates all apply -- and it
+   pays food upkeep like any army, so cutting off its food really does starve it.
+   Its jobs are route analysis (map-agnostic: several alternative paths, the
+   chokepoints on them, and a staging point, with no hard-coded coordinates),
+   composition (countering what the enemy actually fields), and the attack/defend
+   state machine. */
 const AI_G={main:0,def:1,pat:2,navy:3,sieg:4,reinf:5,rgu:6,har:7}; 
 const AI_MILCAP={develop:8,defend:10,pressure:14,allin:22}; 
-
+/* Brain state is per side rather than hard-coded to one, which is the precondition
+   for running whole games of AI against AI. */
 const AI_T={eco:2,strat:10,mil:1.2,navy:2}; 
 function mkAiState(si){return {i:si,state:'develop',sT:0,routes:[],routesT:-1e9,mission:null,retreatT:-1e9,ord:[],foeSeen:{},homeRally:null,clearT:99,breach:null,
   navyRetreatT:-1e9,island:null,                       
@@ -4832,11 +4848,29 @@ const A=si=>AIS[si||0];
 const aiMil=AIS[1]; 
 let aiOn=[false,true]; 
 const aiBrained=si=>(si||0)===1?aiEco:!!aiOn[si||0]; 
-
-
-
-
-
+/* Difficulty knobs: three fair tiers and three handicapped ones. Every constant in
+   the brains reads from this table.
+   A handicap only ever changes numbers that are disclosed on screen -- a gathering
+   multiplier, a cap on attack/defence upgrades. It never bypasses placement rules,
+   costs or the fog of war. */
+/* Army size has two separate axes, and conflating them was a real bug: one number
+   meant both "how big an army this difficulty aims for" (fair, and true at every
+   tier) and "multiply it because this tier is handicapped" (disclosed only on the
+   handicapped tiers). Written as one knob, a fair tier was quietly getting a
+   handicap it never declared. */
+/* adapt = how much the main force scales with the enemy army that has actually been
+   scouted. Without it the cap depended only on the state machine, so falling behind
+   meant training less -- a death spiral. Easy difficulties do not read enemy
+   strength at all; hard and above scale both composition and size to it. */
+/* bind = how tightly personality is bound to civilisation. At the lowest difficulty
+   the draw often mismatches (a heavy-armour civilisation sent out to harass), which
+   is part of what makes it read as unfocused; from hard upwards it always matches.
+   The research line always follows the real civilisation -- personality only shapes
+   behavioural style. */
+/* The tactical columns: squads = how far the army can be divided (one main force
+   and a fixed guard at the bottom, plus patrols, plus mission squads at the top);
+   cmpFoe = whether to compare strengths before attacking rather than only counting
+   waves; tgtSel = how a target is chosen. */
 const AI_DIFF={
   noob:  {nm:'新手',per:2.5,jit:0.40,ord:8,  villF:0.55,outF:0.34,expand:'passive', comp:'single', routes:'first',retreat:0,   scout:'none',   pressMin:7, turtle:240,milCap:0.7,milCheat:1,    supBuf:0.5, adapt:0,   harass:false,squads:'none',  tactics:false,cmpFoe:false,tgtSel:'none',tgtSq:'home',mfMuster:false,outEn:false,outBar:false,cityUp:false,milShare:0.2, waveSz:0.55,regrow:'cap', gather:1,  tech:0,towers:1,wall:false,castle:0,civRead:false,civSee:false,lateStar:false,bind:0.34,
           wt:{eco:1.2,mil:0.7,def:0.5,tech:0.7,sea:0.8,intel:0.3,exp:0.4},mkt:'rescue', mktRate:1.0, mktBal:2.2},
@@ -4854,7 +4888,10 @@ const AI_DIFF={
 };
 const AI_DIFF_ORDER=['noob','normal','hard','boss','shura','god'];
 const aiD=si=>AI_DIFF[A(si).diff]||AI_DIFF.normal;
-
+/* Personality is read from the civilisation table, so adding a civilisation adds a
+   row rather than a branch. The technology line always follows the actual
+   civilisation; only the behavioural columns (opening, harassment, retreat, expansion
+   appetite, walling) come from the personality draw. */
 let AI_CIVROW={}; 
 function rebuildCivRows(){AI_CIVROW={};for(const c of CIVS)if(c.ai){AI_CIVROW[c.id]=c;if(c.aid)AI_CIVROW[c.aid]=c;}}
 rebuildCivRows();
@@ -4910,12 +4947,22 @@ function aiResetBrain(si){
   if(!a.plan)aiDraw(si);
   return a;}
 const aiRetreatR=si=>{const d=aiD(si),st=aiStyle(si);return d.retreat?d.retreat*(st?st.retreatM:1):0;}; 
-
+/* Villager target = the map's carrying capacity (gatherable amount plus renewable
+   caps) scaled by a per-difficulty coefficient, rather than a fixed head count.
+   The dark age gets 0.72 of it, because an early economy cannot absorb a full crew.
+   The outpost cap is the number of ore clusters outside the radius times a
+   per-difficulty willingness -- non-zero even at the easiest setting: everyone
+   expands, the easiest just wants to least. */
 const aiVillT=(si,age)=>{const d=aiD(si),o=AI_OPEN[A(si).plan?A(si).plan.open:'std'],f=aiMapFeat(si);
   return Math.max(6,Math.round((f.natSlots+f.farmCap+f.copCap)*d.villF*(age>=2?1:0.72))+o.villM);};
 const aiOutMax=si=>{const d=aiD(si),o=AI_OPEN[A(si).plan?A(si).plan.open:'std'],st=aiStyle(si);
   return Math.max(0,Math.round(aiMapFeat(si).clusters*d.outF)+o.outM+(st?st.outM:0));};
-
+/* March coefficient: every time-based parameter is shifted globally by how long it
+   takes to march between the two bases.
+   Before the route graph exists (the opening is still fogged) it is estimated from
+   static terrain along a straight line, weighting slow ground and treating deep
+   water as a detour. Once real routes are computed, the actual path length replaces
+   the estimate -- a winding map is not its straight-line distance. */
 const AI_MARCH={ref:24,spd:70,lo:0.6,hi:2.0}; 
 function aiMarchEst(si){
   const hub=aiHub(si),foe=aiFoeCC(si);
@@ -4936,12 +4983,21 @@ function aiMarchC(si){const a=A(si===undefined?1:si);
 const isLandMil=u=>u.hp>0&&!u.gar&&u.dom!=='water'&&AI_MILTYPES.has(u.type);
 function uStrT(k){const c=UT[k]&&UT[k].cost;if(!c)return 0;let s=0;for(const q in c)s+=c[q];return s/50;} 
 function uStr(u){return uStrT(u.type);}
-
-
+/* Estimating enemy strength. The old code took whatever enemy units were visible
+   right now, which turned scouting into a pure penalty: an AI that never scouted
+   believed the enemy had nothing and escalated all the way to an all-in attack,
+   while one that sent scouts saw the truth and stayed cautious -- and lost to it.
+   The replacement is an uncertainty model: observations decay, and underneath them
+   sits a prior for how large an army is likely to be at this point in the game. */
+/* The prior curve, taken from measured army-strength curves in simulation.
+   An over-optimistic prior rewards blindness: the side that assumes an empty map
+   commits everything, and the side with scouts sees the truth and hesitates. The
+   prior has to approximate what an opponent really has by now, so that not scouting
+   is honestly uncertain rather than accidentally confident. */
 const AI_PRIOR={t0:150,per:25,step:1.4,max:18,fade:90};
 const AI_CTR_R=0.9;  
 const AI_SIEGE_S=6;  
-
+/* Military production and sustainment constants. */
 const AI_SIEGE_PROF={ 
   noob:  {base:0,per:999,ramp:0,max:0},   
   normal:{base:1,per:120,ramp:2,max:5},   
@@ -4954,9 +5010,14 @@ const AI_UPKEEP_PER_STR=0.055;
 const AI_SUPPLY_FLOOR=4;                  
 const AI_SUPPLY_HORIZON=120;              
 const AI_VILL_FOOD_PS=2;                  
-
+/* Army group and tactical constants. */
 const AI_REINF_MIN=4;   
-
+/* Staged marching. Attack-moving from home to the enemy base end to end means fast
+   units arrive first and siege engines last, strung out and defeated in detail.
+   Instead the force gathers at a staging point short of the first chokepoint: the
+   centroid arrives, and the next leg waits until a set fraction of the attacking
+   units is inside the gather radius -- with a timeout, so a few dead stragglers
+   cannot stall the whole attack. */
 const AI_STAGE_R=TILE*7;   
 const AI_STAGE_FRAC=0.75;  
 const AI_STAGE_WAIT=22;    
@@ -4966,7 +5027,7 @@ const AI_DEF_LINE=3.5;
 const AI_MAIN_LINE=0.8; 
 const AI_HAR_DUR=40;    
 const AI_HAR_CD=45;     
-
+/* Constants for attacking accurately. */
 const AI_PURE_DEF=2.2;  
 const AI_HEAL_HP=0.7;   
 const AI_HEAL_OK=0.9;   
@@ -4976,7 +5037,7 @@ const AI_FLIP_WIN=45;
 const AI_STOP_T=3;      
 const AI_STOP_BAN=8;    
 let AI_STOPLOSS=true;   
-
+/* Constants for attacking at the right moment, with ablation switches. */
 const AI_PK_HL=60;      
 const AI_OPP_DROP=0.55; 
 const AI_OPP_SELF=0.8;  
@@ -4992,13 +5053,16 @@ let AI_OPPORTUNISM=true;
 let AI_BLOCKADE=true;   
 let AI_HOMESWAP=true;   
 let AI_SEACOORD=true;   
-
+/* Actuator fixes -- commit to a pounce, latch the gather, keep medics with the
+   army -- with ablation switches. All of them go through existing commands and add
+   no new source of randomness. */
 let AI_COMMIT=true;      
 const AI_CMT_WIN=75;    
 const AI_CMT_FLOOR=0.4; 
 let AI_RALLY=true;      
 let AI_MEDFOLLOW=true;  
-
+/* Tactical actuators: kiting, garrisoning troops, live patrols, towers shooting
+   buildings. Hard difficulty and above. */
 let AI_KITE=true;       
 const AI_KITE_ON=0.6,AI_KITE_OFF=0.5; 
 const AI_KITE_R=TILE*12; 
@@ -5009,7 +5073,8 @@ const AI_GARR_THR=TILE*12;
 let AI_TOWERBLD=true;   
 const AI_TOWERBLD_R=0.5; 
 let AI_PATROL=true;     
-
+/* Siege coordination and medical support: escort synchronisation, falling back when
+   cut off, a medic production line, and pulling badly wounded units out to heal. */
 let AI_ESCORT_SYNC=true; 
 const AI_ESC_MIN=4;      
 const AI_ESC_LAG=TILE*8; 
@@ -5027,13 +5092,22 @@ const AI_RGP_HP=0.5;
 const AI_RGP_OK=0.75;    
 const AI_RGP_T=45;       
 const AI_RGP_T0=12;      
-
+/* Breaking into a defended base.
+   Probing showed that the invisible wall attackers hit about thirty tiles out was
+   not an ambush -- it was the defender's forward ring of outposts and towers.
+   Marching straight at the command centre walks into the thickest overlap of three
+   towers at once, so the attack now works the ring apart a point at a time. */
 let AI_NIBBLE=true;      
 const AI_NIB_R=TILE*20;  
 const AI_NIB_PROG=TILE*2;
 let AI_SIEGEPOS=true;    
 const AI_SGP_R=TILE*14;  
-
+/* The three-squad brain -- home guard, attack force, reserve -- which replaced a
+   much more elaborate scoring state machine with base swaps, retreat-into-attack
+   flips, blockades and feint squads.
+   The home guard stays back as a buffer alongside the towers and the town centre's
+   fire; the attack force leaves and does not retreat; the reserve accumulates the
+   next wave. */
 let AI_SQUADS=true;         
 let AI_MUSTER=true;         
 const AI_MUSTER_R=TILE*8;   
@@ -5043,11 +5117,17 @@ let AI_NORETREAT=true;
 const AI_TBACK=15;          
 const AI_TBACK_R=TILE*18;   
 const AI_CLUSTER_R=TILE*18; 
-
+/* The launch threshold is tied to the all-in army size, so it is by construction
+   reachable: the same cap governs production, meaning the threshold can never
+   exceed what the AI is able to build. It grows with the economy, the enemy and the
+   difficulty. */
 const AI_WAVE_FRAC=0.7;     
 const AI_WAVE_K=1.2;        
 const AI_WAVE_END=4;        
-
+/* Strategy layer: choosing which town to attack, gathering before arrival, fighting
+   what is met on the way (running into an army on the road is a fight, not a reason
+   to go home), changing target mid-march at higher difficulties, roaming scouts and
+   a stalemate breaker. Each has its own ablation switch. */
 let AI_TGTSEL=true;         
 let AI_FSTAGE=true;         
 const AI_FSTAGE_R=TILE*8;   
@@ -5060,7 +5140,11 @@ let AI_DIVERT=true;
 const AI_DIVERT_R=TILE*14;  
 let AI_SCOUTROAM=true;      
 let AI_TBACK_HIT=true;      
-
+/* Economic support for the three-squad brain: an even early split between military
+   and economic production (probing convicted a late military start of the
+   ten-minute first wave), wave size scaling with the age, renewable building keeping
+   pace with villagers, outpost and tower spacing, real patrol routes, and barracks
+   at expansions. */
 let AI_PRODBAL=true;        
 let AI_WAVETAB=true;        
 const AI_WAVE_AGE=[0.55,1,1.5]; 
@@ -5076,7 +5160,8 @@ let AI_OUTBAR=true;
 let AI_CITYUP=true;         
 const AI_CITYUP_T=540;      
 let AI_TECHORD=true;        
-
+/* The top difficulties add a fourth squad for harassment, and wire the handicap
+   multipliers into the existing axes rather than inventing new ones. */
 let AI_HARASS4=true;        
 const AI_H4_N=2;            
 let AI_BUCKSEQ=true;        
@@ -5085,9 +5170,15 @@ let AI_MUSTCXL=true;
 const AI_CXL_F=0.6;         
 let AI_BUCKWAR=true;        
 const AI_SCT_CD=75;         
-
+/* Per-squad composition table. Left empty, each squad simply uses the global
+   composition; filling it in changes behaviour without touching code. */
 const AI_SQUAD_COMP={atk:null,res:null};
-
+/* Machine-learned strategy brain: a single linear policy, used only at the top
+   difficulties, argmax so it adds no randomness, and able to fall back to the
+   rule-based brain.
+   It outputs one of six strategic modes plus a three-way investment split, mapped
+   onto the existing actuators. The weights are data -- trained offline, loaded as a
+   file -- so the game itself contains no training code. */
 let AI_ML=true;                                        
 const AI_ML_DIFFS=new Set(['boss','shura','god']);     
 const AI_ML_MODES=['develop','rally','commit','harass','defend','retreat']; 
@@ -5108,7 +5199,12 @@ function aiPrior(si,tt){
 function aiFoeEst(si){ 
   const stale=Math.min(1,Math.max(0,(t-A(si).intelT)/(AI_PRIOR.fade*aiMarchC(si)))); 
   return Math.max(aiFoeObs(si),aiPrior(si,t)*stale);}
-
+/* Intelligence layer: how urgently something needs a look, as a score competing in
+   the same demand pool as everything else.
+   Base intelligence changes slowly and stays fresh for a long time (it decides
+   whether to bring siege); army intelligence changes fast and goes stale quickly
+   (it decides composition). "Take one more look before attacking" falls out of that
+   on its own: the base picture is still good, the army picture has expired. */
 function aiIntelUrg(si){
   const a=A(si),d=aiD(si),marchC=aiMarchC(si),fade=AI_PRIOR.fade*marchC;
   const staleT=t-a.intelT;
@@ -5132,7 +5228,11 @@ function aiConfirmedIncoming(si){
   a.incoming={x:cx,y:cy,d:dHub,cnt:(prev&&dHub<prev.d-2)?prev.cnt+1:(prev&&dHub<prev.d+30?prev.cnt:0)}; 
   return s>=AI_SIEGE_S && a.incoming.cnt>=2;                       
 }
-
+/* Sustainment cap: army size is bounded by what the food economy can feed --
+   income from food gatherers and fishing boats, plus stock amortised over time. So
+   cutting an AI's food supply has a direct causal effect: income falls, the stock
+   runs down, the cap slides, reinforcement stops, and the army shrinks through
+   attrition. It adapts to map size automatically. */
 function aiFoodIncome(si){ 
   let n=0;for(const v of villagers)if(alive(v)&&(v.side||0)===si&&v.job==='food')n++;
   let inc=n*AI_VILL_FOOD_PS*modOf(si).gather;
@@ -5143,7 +5243,9 @@ function aiSupplyCap(si){
   const buf=aiD(si).supBuf===undefined?0.7:aiD(si).supBuf;
   const sustain=(aiFoodIncome(si)*buf+(sd.stock.food||0)/AI_SUPPLY_HORIZON)/AI_UPKEEP_PER_STR;
   return Math.max(AI_SUPPLY_FLOOR,sustain*(sd.starving?0.5:1));}
-
+/* Siege engines: below the top difficulties they follow a standard curve that
+   climbs with game progress and ignores the enemy; at the top they are driven by
+   actual intelligence about the enemy's base, within bounds. */
 function aiSiegeWant(si,T,st){
   const SG=AI_RB.siege,a=A(si);
   if(!SG||!unitUnlocked(SG,si)||T.age<2||!(st==='pressure'||st==='allin'))return 0; 
@@ -5153,16 +5255,26 @@ function aiSiegeWant(si,T,st){
   if(T.age>=3)n+=1;                                 
   n+=Math.min(P.ramp,Math.floor(a.offAcc/P.per));   
   return Math.min(P.max,n);}                         
-
+/* Effective army-size multiplier = fair target size x handicap. The two axes meet
+   here and only here -- ask this function "how big can this tier's army be" rather
+   than multiplying by the raw knob anywhere else. */
 const aiMilMul=d=>d.milCap*(d.milCheat||1);
 function aiMilCap(si,st){ 
   const d=aiD(si),base=(AI_MILCAP[st]||8)*aiMilMul(d);
-  
+  /* During the development phase the cap never scales with enemy strength. Letting it
+     do so was measurably worse: the army formed earlier, attacked earlier and traded
+     itself away, and the extra units ate food and crowded out villagers and age
+     advancement -- turning scouting into an economic tax.
+     The answer to the development phase is development. If something really does come
+     to the door, the state machine switches to defending, and that is when matching
+     the enemy's size matters. */
   let cap=(!d.adapt||st==='develop')?base:Math.min(AI_MILCAP.allin*aiMilMul(d),Math.max(base,aiFoeObs(si)*d.adapt));
   if(AI_SQUADS&&AI_WAVETAB)cap*=AI_WAVE_AGE[Math.min(AI_WAVE_AGE.length-1,Math.max(0,(techOf(si).age||1)-1))]*(d.waveSz||1); 
   return Math.min(cap,aiSupplyCap(si)); 
 }
-
+/* The AI's intelligence API is a thin wrapper over the single vision gate. It used
+   to be a second implementation of the same idea, and the two drifted apart -- which
+   is exactly how the side-bias investigation was misled for weeks. */
 function aiSeesU(si,e){return uSeen(e,si);}   
 function aiKnowsB(si,b){return seenBy(b,si);} 
 function aiFoeCC(si){const hub=aiHub(si);let best=null,bd=1e18; 
@@ -5200,10 +5312,14 @@ function aiAnalyzeRoutes(si){
     if(k>0){let ov=0;for(const c of cells)if(pen[c.i]>0)ov++;
       if(ov>cells.length*0.7)break;} 
     const ws=cells.map((c,i)=>aiCorridorW(cells,i));
-    
+    /* Chokepoint scanning skips anything within six tiles of home: the gaps between
+       your own buildings are not tactical chokepoints. The staging point is also pushed
+       off building footprints. */
     let i0=cells.findIndex(c2=>Math.hypot(c2.x-hub.x,c2.y-hub.y)>TILE*6);if(i0<2)i0=Math.min(2,cells.length-1);
     const bn=[];for(let i=i0;i<cells.length-2;i++)if(ws[i]<=3&&(i===i0||ws[i-1]>3))bn.push({x:cells[i].x,y:cells[i].y,w:ws[i],ci:i});
-    
+    /* The staging point is the nearest open ground before the first chokepoint; with no
+       chokepoint it is 60% of the way along the route, and it is always at least twelve
+       tiles from the enemy centre so it never ends up inside their base. */
     let ri=bn.length?bn[0].ci-3:Math.floor(cells.length*0.6);
     while(ri>i0&&ws[ri]<5)ri--;
     while(ri>i0&&Math.hypot(cells[ri].x-tgt.x,cells[ri].y-tgt.y)<TILE*12)ri--;
@@ -5245,7 +5361,9 @@ function aiMilWant(T,st,si,capOv){
     if(MB&&unitUnlocked(MB,si))w[MB]=cap*0.2;else w[F]+=cap*0.2;
   }else{                                                                
     w={[F]:2,[R]:2};
-    
+    /* Repeat sightings merge naturally: remembered strength is the max of what is
+       visible now and a decaying memory, not a running sum, so seeing the same army
+       twice does not count it twice. */
     const myStr=units.reduce((s,u)=>(u.side===si&&isLandMil(u))?s+uStr(u):s,0);
     const den=Math.max(myStr,AI_COUNTER_BASE);                          
     for(const k of AI_MILTYPES){const cnt=n(k),tw=UT[k].thW||0;if(!cnt||!tw)continue;
@@ -5255,7 +5373,8 @@ function aiMilWant(T,st,si,capOv){
       if(w[ctr]!==undefined||unitUnlocked(ctr,si))w[ctr]=(w[ctr]||0)+cnt*tw; 
       else w[F]+=cnt*tw*0.4;                                            
     }
-    
+    /* Counter-pivot: once the opponent's civilisation is identified, composition leans
+       towards what counters their main unit. */
     const g=d.civRead&&a.civGuess&&AI_CIVROW[a.civGuess];
     if(g)for(const k in g.ai.ctrW)if(w[k]!==undefined||unitUnlocked(k,si))w[k]=(w[k]||1)*g.ai.ctrW[k];
   }
@@ -5285,30 +5404,49 @@ function aiMilProd(myU,T,stk,si){
   const defStr=myU.filter(u=>u.grp===gT[AI_G.def]).reduce((s,u)=>s+uStr(u),0);
   const mainStr=myU.filter(u=>u.grp===gT[AI_G.main]).reduce((s,u)=>s+uStr(u),0);
   const pm=Math.max(4,d.pressMin+AI_OPEN[a.plan?a.plan.open:'std'].pressM);
-  
+  /* Splitting the army is gated by difficulty and by two safety lines: patrols only
+     once the home guard is above its line (splitting a guard that is already too thin
+     makes defence worse, so it does not split), and mission squads only once the main
+     force is above its own. */
   const defWant={[F]:2,[R]:2};
-  
+  /* Patrols used to be gated on a fully staffed home guard. The first two guards are
+     exempt from the economic reservation and arrive at once, but the units that
+     complete the guard have to pass it -- so during the development phase the guard
+     sat at two indefinitely, patrols never launched, and losing one guard made any
+     existing patrol evaporate. The gate is now "the core is in place". */
   const nDefCur=myU.filter(u=>u.grp===gT[AI_G.def]).length;
   const patWant=(d.squads&&d.squads!=='none'&&(AI_PATROL?nDefCur>=2:defStr>=AI_DEF_LINE))?{[F]:1,[R]:1}:{}; 
   const dyn=d.squads==='dynamic';
   const rguWant=(dyn&&a.rguPt)?{[F]:1,[R]:1}:{};                                     
   const harWant=(dyn&&d.harass&&a.plan&&(a.plan.harass||t<a.oppRaidT+60)&&mainStr>=pm*AI_MAIN_LINE)? 
     ((MB&&unitUnlocked(MB,si))?{[MB]:2}:{[F]:1,[R]:1}):{};
-  
+  /* Reinforcement group: once the main force has left, new units that would fill its
+     gaps join a reinforcement group at home instead, and march only once enough of
+     them have gathered. Without it, each new unit walked to the old rally point alone
+     and died on the way. */
   const mainOut=(st==='pressure'||st==='allin')&&!!a.mission&&myU.some(u=>u.grp===gT[AI_G.main]);
   const haveG=Array.from({length:8},()=>({}));
   for(const u of myU){const gi=gT.indexOf(u.grp);if(gi>=0)haveG[gi][u.type]=(haveG[gi][u.type]||0)+1;}
   for(const b of buildings)if(b.side===si&&b.hp>0)for(const q of b.queue)
     if(q.tag<8)haveG[q.tag][q.type]=(haveG[q.tag][q.type]||0)+1;
   const mainAll={};for(const src of [haveG[AI_G.main],haveG[AI_G.reinf]])for(const k in src)mainAll[k]=(mainAll[k]||0)+src[k]; 
-  
+  /* Escort valve: siege engines cost three times an infantryman and are fragile, so
+     more of them than the troops escorting them is just an expensive way to deliver
+     targets. Production clamps the number wanted to a fraction of the non-siege units
+     available to escort them -- always leaving room for the first one, so it cannot
+     deadlock. The easier difficulties skip the valve. */
   {const SGk=AI_RB.siege;
    if(SGk&&want[SGk]>0&&d.scout!=='none'){
      let escortCnt=0;for(const k in mainAll)if(k!==SGk)escortCnt+=mainAll[k];
      want[SGk]=Math.max(1,Math.min(want[SGk],Math.floor(escortCnt*AI_ESCORT_R)));
    }}
   const nDef=(haveG[AI_G.def][F]||0)+(haveG[AI_G.def][R]||0);
-  
+  /* On the defensive, reinforcements go to the main force first. The guard has only
+     four slots, and with an enemy army harvesting them at the door, a rigid
+     guard-then-patrol-then-main order poured every new unit into that leaky bucket:
+     the main force stayed at zero, no counter-attack was ever possible, and defending
+     became an absorbing state. The main force is the counter-attack, and the guard
+     stands at the same rally point anyway. */
   const q=st==='defend'?[[want,AI_G.main],[defWant,AI_G.def],[patWant,AI_G.pat]]
                        :[[defWant,AI_G.def],[patWant,AI_G.pat],[rguWant,AI_G.rgu],[harWant,AI_G.har],[want,mainOut?AI_G.reinf:AI_G.main]];
   for(const [pw,gi] of q){
@@ -5335,7 +5473,9 @@ function aiOrder(si,ti,x,y,task,focus){
   if(focus&&focus.hp>0)tagsOf(si)[ti].focus=focus;
 }
 let aiMilOn=true; 
-
+/* Machine-learned strategy: feature extraction (honestly observable, fixed length)
+   plus linear inference by argmax, so it introduces no randomness and stays
+   deterministic. */
 const AI_ML_ROLE={front:'front',anti:'front',ranged:'ranged',mobile:'mobile',siege:'siege',support:'support'}; 
 const AI_ML_NF={force:30,vil:60,stock:2500,inc:60,fort:6,city:6}; 
 const AI_ML_FN=26; 
@@ -5402,7 +5542,10 @@ function aiMlDecide(si,pol,ctx){
   const inv={eco:1,mil:1,tech:1},IK=['eco','mil','tech'],IV=pol.inv||[];
   for(let d=0;d<3;d++){const z=IV[d]?dot(IV[d]):0;const v=1+z;inv[IK[d]]=v<0.4?0.4:v>2.5?2.5:v;} 
   return {mode:AI_ML_MODES[bi],modeIdx:bi,inv,scores};}
-
+/* Kiting was never used in practice, so it is now chosen explicitly: a group that
+   is mostly ranged and mobile, facing a locally observed majority of melee, is the
+   classic kiting matchup and switches to that engagement rule; when the conditions
+   go away it switches back. Two thresholds provide hysteresis. */
 function aiKiteEval(si,d,myU,foeU){
   const a=A(si),act=a.mlAct,diffOK=!!d.tactics;
   let kiteN=0;
@@ -5429,7 +5572,12 @@ function aiKiteEval(si,d,myU,foeU){
   }
   a.kiteN=kiteN;
 }
-
+/* Garrisoning troops. Watching games showed the AI never used its own buildings:
+   a damaged group under threat now shelters in a nearby fortification, which both
+   protects it and adds arrows, and comes out when it has healed or the threat has
+   gone. The 40/75% hysteresis matches the villagers' repair logic.
+   This is a group-level order, deliberately: a per-unit version would give the AI a
+   gesture the player does not have. */
 const AI_GARR_G=[AI_G.main,AI_G.def,AI_G.pat,AI_G.reinf,AI_G.rgu,AI_G.har]; 
 function aiGarrisonEval(si,d,myU,foeU){
   const a=A(si),ov=a.mlAct.garrison;
@@ -5448,7 +5596,8 @@ function aiGarrisonEval(si,d,myU,foeU){
       continue; 
     }
     if(!enabled)continue;
-    
+    /* Entry condition: the group's *average* health is low, it is under threat, and
+       there is a fortification with room near its centroid. */
     const gU=myU.filter(u=>u.grp===g&&!u.garTgt);
     if(!gU.length)continue;
     let hp=0,mx=0,cx=0,cy=0;
@@ -5468,7 +5617,10 @@ function aiGarrisonEval(si,d,myU,foeU){
   let n=0;for(const u of units)if(u.side===si&&u.gar&&isGarB(u.gar))n++;
   a.garrN=n;
 }
-
+/* Shared: the friendly fortification nearest a point. It doubles as the retreat
+   point for cut-off siege and the regrouping point for the main force, so wounded
+   units falling back can shelter inside on the way. With no fortification, the home
+   rally point. */
 function aiSafePt(si,x,y){
   const a=A(si);let bp=null,bd=1e9;
   for(const b of buildings){
@@ -5479,13 +5631,19 @@ function aiSafePt(si,x,y){
   if(bp)return {x:bp.x,y:bp.y};
   return a.homeRally?{x:a.homeRally.x,y:a.homeRally.y}:null;
 }
-
+/* Breaking into a defended base. Above hard, the default assault mode nibbles at
+   the perimeter rather than driving at the command centre. */
 function aiAssaultMode(si,d){
   const ov=A(si).mlAct.assault;
   if(ov==='direct'||ov==='nibble'||ov==='blockade')return ov;                 
   return (AI_NIBBLE&&!!d.tactics)?'nibble':'direct';      
 }
-
+/* Thinnest-point scan: among known enemy defences within reach of the advance
+   anchor and closer to the enemy centre than the anchor is -- so progress is always
+   forward -- take the one with the lowest local defence score. "Thinnest" means
+   taking the least crossfire while attacking it.
+   Everything is read through the side's own intelligence, so an unscouted tower
+   does not count. Picking the weak point is intelligence paying off, not peeking. */
 function aiNibTgt(si,ax,ay,cc){
   let best=null,bs=1e18;
   for(const b of buildings){
@@ -5499,7 +5657,11 @@ function aiNibTgt(si,ax,ay,cc){
   }
   return best;
 }
-
+/* Cut-off siege retreats. A catapult needs 2.5s to set up, loses it on any
+   movement, is the slowest thing on the field, the most fragile, and costs three
+   times an infantryman -- unescorted, it is iron given away. When the friendly
+   combat strength around it stays below the escort threshold for several seconds
+   (brief passes do not count), the whole siege group pulls back. */
 function aiSiegeGuardEval(si,d,myU,foeU){
   const a=A(si),diffOK=!!d.tactics;
   const sgU=myU.filter(u=>UT[u.type].role==='siege');
@@ -5523,20 +5685,23 @@ function aiSiegeGuardEval(si,d,myU,foeU){
     if(myU.some(u=>u.grp===tagsOf(si)[AI_G.sieg]))AICMD.transferTag(si,AI_G.sieg,AI_G.reinf); 
   }
 }
-
+/* Three-squad military entry point. With the ablation switch off it falls back to
+   the previous multi-group implementation, byte for byte, as a control. */
 function aiMilTick(si){
   si=si===undefined?1:si;
   if(!AI_SQUADS)return aiMilTickLegacy(si);
   return aiMilTickSquads(si);
 }
-
+/* The previous multi-group implementation, kept as the ablation baseline. */
 function aiMilTickLegacy(si){
   si=si===undefined?1:si;
   const a=A(si),d=aiD(si),T=techOf(si),stk=stockOf(si),hub=aiHub(si);
   if(!hub)return;
   const tgtCC=aiFoeCC(si);
   if((si===1&&aiRoutesDirty&&t-a.routesT>15)||t-a.routesT>60){if(si===1)AI_SEA.ready=false;aiAnalyzeRoutes(si);} 
-  
+  /* Intelligence, under the same vision rules as the player: enemy and friendly
+     strength, plus a slowly decaying memory of enemy composition, so an army that
+     walks out of sight is not instantly forgotten. */
   const myU=units.filter(u=>u.side===si&&isLandMil(u));
   const foeU=units.filter(u=>u.side!==si&&isLandMil(u)&&aiSeesU(si,u));
   const myStr=myU.reduce((s,u)=>s+uStr(u),0);
@@ -5556,7 +5721,8 @@ function aiMilTickLegacy(si){
   const foeEst=aiFoeEst(si); 
   aiCivGuess(si,foeU); 
   aiScoutCtl(si); 
-  
+  /* Home threat scan, which triggers defence and the response to a raided mine:
+     visible enemies near our buildings or villagers give a threat centroid. */
   let thrX=0,thrY=0,thrS=0;
   for(const e of foeU){
     let near=buildings.some(b=>b.side===si&&b.hp>0&&Math.hypot(e.x-b.x,e.y-b.y)<TILE*9)
@@ -5576,7 +5742,12 @@ function aiMilTickLegacy(si){
     const w=nearestWaterXY(thrX,thrY);
     if(w&&Math.hypot(w.x-thrX,w.y-thrY)<TILE*6)a.navyCall={x:w.x,y:w.y,t};
   }
-  
+  /* Two signals that the moment is right, both from actual sightings.
+     One: the opponent has just fought and taken losses -- their observed strength is
+     far below its recent peak while ours is still near ours. In a duel that usually
+     means their army broke on our fortifications while we stayed intact, so the
+     threshold to attack drops inside that window.
+     Two: their main force is far from home, which is an opening. */
   let opp=false,oppRaid=false;
   if(d.scout==='active'&&AI_OPPORTUNISM){
     const dk=Math.pow(0.5,(AI_T.mil*d.per)/AI_PK_HL),obs=aiFoeObs(si);
@@ -5591,29 +5762,55 @@ function aiMilTickLegacy(si){
   }
   if(a.state==='defend')a.defAcc+=AI_T.mil*aiD(si).per; 
   if(a.state==='pressure'||a.state==='allin')a.offAcc+=AI_T.mil; 
-  
+  /* The attack/defend state machine (develop -> pressure -> all-in, plus defending
+     and retreat) with a timeout clause for an opponent who turtles indefinitely.
+     Every threshold is read from the difficulty knobs and the opening template. */
   const gDef=tagsOf(si)[AI_G.def];
   const defStr=myU.filter(u=>u.grp===gDef).reduce((s,u)=>s+uStr(u),0);
-  
+  /* Wave decisions look at the main force rather than the whole army. Counting every
+     unit meant that after the main force died, the guards and patrols still totalled
+     enough to re-enter the pressure state immediately -- so every newly produced unit
+     walked to the old rally point on its own and was killed. Now new units gather at
+     home until they are a wave. */
   const gMainT=tagsOf(si)[AI_G.main];
   const mainStr=myU.filter(u=>u.grp===gMainT).reduce((s,u)=>s+uStr(u),0);
   const setState=s2=>{if(a.state!==s2){a.state=s2;a.sT=t;}};
   const inSt=t-a.sT;
   const op=AI_OPEN[a.plan?a.plan.open:'std'];
   const pressMin=Math.max(4,d.pressMin+op.pressM),turtleT=Math.max(30,(d.turtle+op.turtleM)*aiMarchC(si)); 
-  
+  /* The easier difficulties do not compare strengths before attacking; they simply
+     wait for a wave. Running into a large army or a dense line of fortifications
+     raises the wave threshold rather than cancelling the attack -- same knob, no new
+     mechanism. */
   const cmp=d.cmpFoe!==false;
   let pressReq=pressMin;
   if(!cmp){
     let forts=0;for(const b of buildings)if(b.side!==si&&b.hp>0&&AI_FORT_T.has(b.type)&&aiKnowsB(si,b))forts++;
     pressReq=pressMin+Math.min(6,Math.max(0,(aiFoeObs(si)-pressMin)*0.5))+Math.min(3,forts*0.5);
   }
-  
-  
+  /* Threshold for entering the defensive state, deliberately raised. At the old
+     value, two spearmen within nine tiles of any building at all flipped the entire
+     brain to defending -- and with farms and outposts scattered across the map, a
+     passing patrol was enough. The result was constant flapping between developing
+     and defending, which kept resetting the timer that eventually forces an attack,
+     so both sides sat at home until the clock ran out. */
+  /* Swapping bases: a conditional gamble for the top difficulty, distinct from
+     turning an attack around mid-retreat. It fires when the enemy's main force is
+     pressing our base and we cannot win the fight there, but their centre is known to
+     be weakly defended and ours can hold without us. It acts on memory, since by then
+     we usually cannot see their base at all. */
   let swapHold=a.mission&&a.mission.kind==='swap'&&t<a.swapT+AI_SWAP_WIN;
-  
+  /* Commitment to a pounce. Once an all-in attack on the enemy centre is under way,
+     the commitment window holds even if the situation at home turns defensive --
+     otherwise sending the main force out immediately spikes the home threat, the
+     main force is recalled, and it never once reaches the enemy centre. That recall
+     loop was why bases were never actually destroyed. */
   const baseCmt=AI_COMMIT&&aiRetreatR(si)>0&&a.mission&&a.mission.kind==='base'&&t<a.cmtT+AI_CMT_WIN&&mainStr>=a.cmtStr*AI_CMT_FLOOR; 
-  
+  /* The machine-learned brain, at the top difficulties only: the predicted mode
+     drives the state machine and the investment split drives resource weighting, with
+     a fallback to the rule-based brain. Commitment windows are respected -- a
+     committed gamble is not interrupted -- and the army-wiped safety clause still
+     applies. */
   let mlUse=false;
   if(aiMlEligible(si)&&!swapHold){
     const dec=aiMlDecide(si,aiPolicyFor(si),null);
@@ -5699,9 +5896,14 @@ function aiMilTickLegacy(si){
   }
   
   if(a.state==='develop'&&a.homeRally&&!a.mission)aiOrder(si,AI_G.main,a.homeRally.x,a.homeRally.y,'guard');
-  
+  /* Early warning at the top difficulty: raise the alarm only when an attack is
+     confirmed, not merely suspected. With the threat not yet at the door but a
+     sizeable force confirmed advancing, the one defensive group that is normally away
+     from home -- the patrol -- is recalled to the rally point to meet it. */
   const preAlert=incoming&&d.scout==='active'&&thrS<=0&&!!a.homeRally;
-  
+  /* Patrols cover the home zone, and only that. Doubling them up as feint squads
+     never worked: the feint order was overwritten by this branch's patrol order on
+     the very next tick, so they never once reached the enemy economy. */
   const gPat=tagsOf(si)[AI_G.pat];
   
   if(thrS>0&&defStr<AI_DEF_LINE&&d.squads&&d.squads!=='none'&&myU.some(u=>u.grp===gPat))AICMD.transferTag(si,AI_G.pat,AI_G.def); 
@@ -5718,7 +5920,10 @@ function aiMilTickLegacy(si){
      else{
        const reStr=reUs.reduce((s,u)=>s+uStr(u),0);
        const reSupOnly=AI_MEDFOLLOW&&reUs.every(u=>UT[u.type].role==='support'); 
-       
+       /* Escorts have to march with the siege, not merely at the same time. The old
+          threshold counted total strength, and two catapults alone exceeded it -- so an
+          unescorted siege group set off by itself and arrived as targets. When a column
+          contains siege, the threshold counts escorting combat strength instead. */
        const reSg=reUs.some(u=>UT[u.type].role==='siege');
        const reEsc=reUs.reduce((s,u)=>{const r=UT[u.type].role;return (r==='siege'||r==='support')?s:s+uStr(u);},0);
        const escOK=!(AI_ESCORT_SYNC&&reSg)||reEsc>=AI_ESC_MIN;
@@ -5727,7 +5932,10 @@ function aiMilTickLegacy(si){
        if(a.reinfDep&&Math.hypot(rcx-mcx,rcy-mcy)<TILE*5){AICMD.transferTag(si,AI_G.reinf,AI_G.main);a.reinfDep=false;a.reHold=0;} 
        else if(escOK&&(a.reinfDep||reStr>=AI_REINF_MIN||reSupOnly)){
          a.reinfDep=true;
-         
+         /* Leaving together is not the same as travelling together: a catapult moves at 45
+            against infantry's 70, so on a large map the column stretches into a line, the
+            escort arrives and merges with the main force, and the siege finishes the journey
+            alone. */
          let reHold=false;
          if(AI_ESCORT_SYNC&&reSg){
            const reEscU=reUs.filter(u=>{const r=UT[u.type].role;return r!=='siege'&&r!=='support';});
@@ -5791,7 +5999,10 @@ function aiMilTickLegacy(si){
   
   if((a.state==='pressure'||a.state==='allin')&&myU.length){
     if(a.mission&&a.mission.tgt&&a.mission.tgt.hp<=0)a.mission=null;
-    
+    /* Completing the pounce. All-in means everything at the enemy centre, but the old
+       code only created that mission when no mission existed -- so an economic mission
+       from the pressure phase carried straight into the all-in, and the main force kept
+       attacking farms while the enemy centre sat at full health all game. */
     
     if(a.state==='allin'&&a.mission&&(a.mission.kind==='eco'||(a.mission.kind==='blockade'&&a.mlAct.assault!=='blockade'))&&tgtCC&&aiRetreatR(si)>0)a.mission=null;
     if(!a.mission){
@@ -5814,7 +6025,9 @@ function aiMilTickLegacy(si){
       if(tgt){
         const r=aiPickRoute(si);
         const legs=[];
-        
+        /* Once the main force is deep in enemy territory, re-targeting no longer routes it
+           back through its own rally point, so it can shift from one point to the next
+           without running home in between. */
         const gU0=myU.filter(u=>u.grp===tagsOf(si)[AI_G.main]);
         const c0=gU0.length?{x:gU0.reduce((s,u)=>s+u.x,0)/gU0.length,y:gU0.reduce((s,u)=>s+u.y,0)/gU0.length}:hub;
         if(r&&kind!=='breach'&&Math.hypot(tgt.x-hub.x,tgt.y-hub.y)>TILE*16&&Math.hypot(tgt.x-c0.x,tgt.y-c0.y)>TILE*16)legs.push({x:r.rally.x,y:r.rally.y}); 
@@ -5833,7 +6046,9 @@ function aiMilTickLegacy(si){
       const gU=myU.filter(u=>u.grp===tagsOf(si)[AI_G.main]);
       if(gU.length){
         const cx=gU.reduce((s,u)=>s+u.x,0)/gU.length,cy=gU.reduce((s,u)=>s+u.y,0)/gU.length;
-        
+        /* Retreat test: if the enemy-to-friendly strength ratio within 380px of the centroid
+           exceeds the threshold, this fight is lost -- pull back home, with a cooldown to
+           stop it flapping. A threshold of zero means the easier difficulties never retreat. */
         const rr=aiRetreatR(si);
         const near=foeU.filter(e=>Math.hypot(e.x-cx,e.y-cy)<380);
         const lf=near.reduce((s,u)=>s+uStr(u),0);
@@ -5847,7 +6062,10 @@ function aiMilTickLegacy(si){
           if(a.mission.tgt.hp<a.cmtHp-1e-6){a.cmtHp=a.mission.tgt.hp;a.cmtT=t;} 
         }
         if(rr&&lf>lm*rr&&t>a.retreatT+18&&!flipHold&&!baseCmt){ 
-          
+          /* Turning a retreat into an attack. Losing to the enemy's main force means their
+             main force is out here -- and their base is not. It requires all three: we are
+             closer to their base than they are, their base really is far from them, and ours
+             can hold. Then instead of going home we go for their centre. */
           let flip=false;
           if(d.scout==='active'&&tgtCC&&t>a.flipT+AI_FLIP_CD&&lf>0){
             const fx=near.reduce((s,u)=>s+u.x,0)/near.length,fy=near.reduce((s,u)=>s+u.y,0)/near.length;
@@ -5876,14 +6094,22 @@ function aiMilTickLegacy(si){
               for(const b of buildings)if(b.side!==si&&b.hp>0&&aiKnowsB(si,b)&&(BT[b.type].rng||BT[b.type].wall||BT[b.type].gate)
                 &&Math.hypot(b.x-cx,b.y-cy)<=AI_NIB_R)a.nibN++;}                  
           }else{m.nib=null;m.nibOn=false;a.nibAnch=null;a.nibThin=-1;a.nibN=0;}   
-          
+          /* Nibbling cannot apply only on the final leg of a march. An all-in mission's legs
+             are [staging point, enemy centre], and the main force almost never leaves the
+             first one before the window closes -- so the intermediate target was chosen
+             correctly and nobody ever went to attack it. The real meaning is "once the outer
+             edge of the enemy defensive ring is reached". */
           const nibOn=!!(m.nib&&m.nib.hp>0)&&(m.li===m.legs.length-1
             ||Math.hypot(cx-m.nib.x,cy-m.nib.y)<=Math.hypot(cx-m.legs[m.li].x,cy-m.legs[m.li].y));
           m.nibOn=nibOn;                                          
           const eTgt=nibOn?m.nib:m.tgt;
           const leg=nibOn?{x:m.nib.x,y:m.nib.y}:m.legs[m.li];
           const mFoc=(m.kind!=='blockade'&&eTgt.size)?eTgt:null; 
-          
+          /* Regrouping when badly hurt. A half-strength army that keeps pushing without
+             healing is wiped out, and then there is nothing left on the field and the next
+             wave has to start from nothing. The previous rule only stopped in place during a
+             lull, with no disengage-heal-return loop, so the main force stayed glued to the
+             front at half health until the next contact killed it. */
           const hpF=gU.reduce((s,u)=>s+u.hp/u.maxHp,0)/gU.length;
           a.regrpHp=hpF;
           {const ov=a.mlAct.regroup,rgEn=ov===false?false:(ov===true?true:(AI_REGROUP&&!!d.tactics));
@@ -5907,7 +6133,10 @@ function aiMilTickLegacy(si){
             else if(a.healHold&&(hpF>=AI_HEAL_OK||t>a.healHold+AI_HEAL_T||!meds)){
               a.healHold=0;aiOrder(si,AI_G.main,leg.x,leg.y,'attack',mFoc);}
           }else if(a.healHold&&(lf>0||a.regrp)){a.healHold=0;if(!a.regrp)aiOrder(si,AI_G.main,leg.x,leg.y,'attack',mFoc);} 
-          
+          /* Gather latch for siege. Staged marching only checked cohesion at the moment the
+             centroid reached a staging point, so between staging points -- often dozens of
+             tiles -- the fast units still outran the catapults, and the escort was fiction by
+             the time the enemy line was reached. Now cohesion is checked while marching. */
           let escHold=false;
           if(AI_ESCORT_SYNC&&!a.regrp&&!a.healHold){
             const asU=myU.filter(u=>u.grp===tagsOf(si)[AI_G.main]||u.grp===tagsOf(si)[AI_G.sieg]);
@@ -5962,7 +6191,11 @@ function aiMilTickLegacy(si){
      if(myU.some(u=>u.grp===tagsOf(si)[AI_G.main]&&UT[u.type].role==='siege'))
        AICMD.splitRole(si,AI_G.main,AI_G.sieg,'siege');
      const m=a.mission;
-     
+     /* Siege actually arriving. Before this, catapults fired zero shots at buildings all
+        game, on both sides: the siege group was assigned the mission's final target --
+        an enemy centre eighty tiles away -- and focus fire only applies inside the
+        engagement radius, so they neither focused on anything nor got there. They now
+        share the same intermediate target as the main force. */
      const sgOn=AI_SIEGEPOS&&!!m.nibOn&&!!m.nib&&m.nib.hp>0;  
      const sgTgt=sgOn?m.nib:m.tgt;
      const leg=sgOn?{x:m.nib.x,y:m.nib.y}:m.legs[m.li];
@@ -5977,8 +6210,13 @@ function aiMilTickLegacy(si){
    a.nibSgOut=(et&&et.size)?myU.filter(u=>UT[u.type].role==='siege'&&Math.hypot(u.x-et.x,u.y-et.y)<=AI_SGP_R&&siegeReady(u)).length:0;}
   tagsOf(si)[AI_G.main].noBld=!!(a.mission&&a.mission.kind==='blockade'); 
 }
-
-
+/* ================================================================================
+   The three-squad brain: home guard, attack force, reserve.
+   ================================================================================ */
+/* Muster point: on our own frontier, offset towards the target, and outside the
+   firing rings of any known enemy tower, centre or castle. Aiming it along the line
+   to the target matters -- using the main road instead meant mustering with your
+   back to the objective whenever the objective was not on that road. */
 function aiMusterPt(si){
   const a=A(si),hub=aiHub(si);
   let mp=a.homeRally?{x:a.homeRally.x,y:a.homeRally.y}:(hub?{x:hub.x+TILE*3,y:hub.y}:null);
@@ -5988,7 +6226,11 @@ function aiMusterPt(si){
   if(mp&&hub&&aiDefScore(si,mp.x,mp.y)>0)mp={x:hub.x+(mp.x-hub.x)*0.35,y:hub.y+(mp.y-hub.y)*0.35}; 
   return mp;
 }
-
+/* Known enemy towns: anchored on enemy centres, cities and outposts that have
+   actually been seen, with anchors within ten tiles merged into one town. Each town
+   is scored for weakness by its known defences plus observed troops, in the same
+   spirit as the local defence score but at town scale. The scan order is by tile
+   coordinate, which keeps it deterministic. */
 function aiFoeClusters(si){
   const anchors=buildings.filter(b=>b.side!==si&&b.hp>0&&(BT[b.type].cc||b.type==='outpost')&&aiKnowsB(si,b));
   anchors.sort((p,q)=>(p.tx-q.tx)||(p.ty-q.ty));
@@ -6007,7 +6249,9 @@ function aiFoeClusters(si){
   }
   return cls;
 }
-
+/* Forward staging post: a set distance back from the target, offset towards where
+   the wave is coming from, and pushed further back if it would sit inside known
+   enemy fire. */
 function aiStagePt(si,tgt,cx,cy){
   if(!tgt)return null;
   const hub=aiHub(si);
@@ -6022,7 +6266,12 @@ function aiStagePt(si,tgt,cx,cy){
   }
   return {x:px,y:py};
 }
-
+/* Choosing the wave's target: walled in, breach the wall first; otherwise pick
+   among known towns by the difficulty's rule -- the opponent's main base, the
+   nearest by real path length rather than straight line, or the weakest. With no
+   known town, the nearest known enemy economy; with nothing at all, nothing, and
+   the scouts go looking. Cached for a few seconds, because the path-length variant
+   is not cheap. */
 function aiWaveTarget(si){
   const a=A(si);
   if(a.breach&&a.breach.hp>0)return a.breach;
@@ -6064,7 +6313,10 @@ function aiWaveTarget(si){
   a.wtgtB=b;a.wtgtT=t;
   return b;
 }
-
+/* Three-squad production: fill the home guard's fixed quota first (casualties take
+   priority), then patrols, then accumulate the reserve for the next wave, capped at
+   the all-in size so a wave is big enough to matter. An attack force already in the
+   field is not topped up -- the reserve merges into it as a new wave instead. */
 function aiMilProdSquads(myU,T,stk,si){
   const a=A(si),d=aiD(si),st=a.state;
   const F=AI_RB.front,R=AI_RB.ranged,gT=tagsOf(si);
@@ -6073,7 +6325,10 @@ function aiMilProdSquads(myU,T,stk,si){
   const dn=AI_DIFFTAB?Math.min(3,Math.max(1,T.age||1)):2;                         
   const defWant={[F]:dn,[R]:dn};                                                  
   const patWant=(d.squads&&d.squads!=='none'&&(AI_PATROL?nDefCur>=2:defStr>=AI_DEF_LINE))?{[F]:1,[R]:1}:{}; 
-  
+  /* The fourth squad, at the top difficulties only, and only once the main force is
+     above its safety line: splitting off a raiding party that makes the main wave too
+     weak is worse than not raiding. It prefers cavalry, which is the formation that
+     goes straight for villagers. */
   const MB=AI_RB.mobile;
   const atkResStr=myU.filter(u=>u.grp===gT[AI_G.main]||u.grp===gT[AI_G.sieg]||u.grp===gT[AI_G.reinf]).reduce((s,u)=>s+uStr(u),0);
   const harWant=(AI_HARASS4&&d.harass&&atkResStr>=(a.waveReq||8)*AI_MAIN_LINE)?((MB&&unitUnlocked(MB,si))?{[MB]:AI_H4_N}:{[F]:1,[R]:1}):{};
@@ -6091,7 +6346,14 @@ function aiMilProdSquads(myU,T,stk,si){
    }}
   const nDef=(haveG[AI_G.def][F]||0)+(haveG[AI_G.def][R]||0);
   const q=[[defWant,AI_G.def],[patWant,AI_G.pat],[harWant,AI_G.har],[want,AI_G.reinf]]; 
-  
+  /* Early production is split roughly evenly between military and development.
+     While cumulative military spending stays under a multiple of cumulative
+     development spending, it bypasses the reservation ledger (the cash still has to
+     exist) -- otherwise economic reservations block military production for the whole
+     early game, which probing convicted as the cause of a reserve force that stayed
+     at zero for the first seven minutes.
+     The allowance is self-balancing: it accrues as the economy really spends, so
+     military spending trails development and can never starve it. */
   const sd=S_(si),techFin=AI_PRODBAL&&aiTechFin(si,T);
   for(const [pw,gi] of q){
     let pick=null,pd=0.35;
@@ -6111,13 +6373,17 @@ function aiMilProdSquads(myU,T,stk,si){
     break;
   }
 }
-
+/* Three-squad orchestration: intelligence and threat scanning first, then the wave
+   lifecycle (develop, muster, launch), the mandatory gather, no retreat for the
+   attack force with a timed fallback home, and finally march or attack mode.
+   The tactical layer is unchanged underneath: kiting, sheltering when hurt,
+   nibbling at the perimeter, siege positioning, and pulling out cut-off units. */
 function aiMilTickSquads(si){
   const a=A(si),d=aiD(si),T=techOf(si),stk=stockOf(si),hub=aiHub(si);
   if(!hub)return;
   const tgtCC=aiFoeCC(si);
   if((si===1&&aiRoutesDirty&&t-a.routesT>15)||t-a.routesT>60){if(si===1)AI_SEA.ready=false;aiAnalyzeRoutes(si);}
-  
+  /* Intelligence -- honest vision. */
   const myU=units.filter(u=>u.side===si&&isLandMil(u));
   const foeU=units.filter(u=>u.side!==si&&isLandMil(u)&&aiSeesU(si,u));
   const myStr=myU.reduce((s,u)=>s+uStr(u),0);
@@ -6135,7 +6401,7 @@ function aiMilTickSquads(si){
   const foeEst=aiFoeEst(si);
   aiCivGuess(si,foeU);
   aiScoutCtl(si);
-  
+  /* Home threat scan, with memory of raided resources. */
   let thrX=0,thrY=0,thrS=0;
   for(const e of foeU){
     let near=buildings.some(b=>b.side===si&&b.hp>0&&Math.hypot(e.x-b.x,e.y-b.y)<TILE*9)
@@ -6153,19 +6419,21 @@ function aiMilTickSquads(si){
     const w=nearestWaterXY(thrX,thrY);
     if(w&&Math.hypot(w.x-thrX,w.y-thrY)<TILE*6)a.navyCall={x:w.x,y:w.y,t};}
   a.rguPt=null; 
-  
+  /* Squad strengths. */
   const gT=tagsOf(si);
   const strOf=gi=>myU.filter(u=>u.grp===gT[gi]).reduce((s,u)=>s+uStr(u),0);
   const defStr=strOf(AI_G.def)+strOf(AI_G.pat);   
   const resStr=strOf(AI_G.reinf);                 
   const atkStr=strOf(AI_G.main)+strOf(AI_G.sieg); 
-  
+  /* Launch threshold, tied to the all-in size so it is always reachable. */
   const allinCap=aiMilCap(si,'allin');
   let waveReq=allinCap*AI_WAVE_FRAC;
   if(d.tactics)waveReq=Math.max(waveReq,Math.min(allinCap,aiFoeObs(si)*AI_WAVE_K));
   waveReq=Math.max(4,waveReq);
   a.waveReq=+waveReq.toFixed(1);
-  
+  /* Home in real danger: the guard and reserve together cannot hold. The threshold is
+     set at a real attack, so a small raid does not flip the whole brain onto the
+     defensive. */
   const homeDanger=thrS>Math.max(AI_SIEGE_S,(defStr+resStr)*AI_CTR_R);
   
   if(a.atkOut&&atkStr<AI_WAVE_END){a.atkOut=false;a.atkTgt=null;a.atkMode='march';a.tbackOn=false;a.staged=false;a.stageT=0;a.mfT=0;}
@@ -6184,7 +6452,7 @@ function aiMilTickSquads(si){
       else if(dec.mode==='defend'||dec.mode==='retreat')mlLaunch=false;
     }else a.mlRally=false;
   }else a.mlRally=false;
-  
+  /* Reserve gathers into a wave, then launches. */
   const launchOK=(!homeDanger)&&(mlLaunch!==false);
   if(a.muster===0&&!a.resDep&&launchOK){
     if(resStr>=waveReq||(mlLaunch===true&&resStr>=Math.max(4,waveReq*0.5)))a.muster=t; 
@@ -6232,7 +6500,8 @@ function aiMilTickSquads(si){
   aiKiteEval(si,d,myU,foeU);        
   aiGarrisonEval(si,d,myU,foeU);    
   aiSiegeGuardEval(si,d,myU,foeU);  
-  
+  /* Home guard: garrison plus patrol, kept back as a buffer alongside the towers and
+     the town centre's fire. */
   const gDef=gT[AI_G.def],gPat=gT[AI_G.pat];
   if(thrS>0){
     aiOrder(si,AI_G.def,thrX,thrY,'guard'); 
@@ -6259,7 +6528,8 @@ function aiMilTickSquads(si){
     else{
       const cx=atkU.reduce((s,u)=>s+u.x,0)/atkU.length,cy=atkU.reduce((s,u)=>s+u.y,0)/atkU.length;
       let tgt=a.atkTgt;
-      
+      /* In contact: any unit in the wave has been fired on in the last few seconds.
+         Attacking villagers does not count, since villagers do not shoot back. */
       const engaged=AI_TBACK_HIT?atkU.some(u=>t-(u.lastHitT||-1e9)<3):foeU.some(e=>Math.hypot(e.x-cx,e.y-cy)<TILE*8);
       const nearHome=Math.hypot(cx-hub.x,cy-hub.y)<=AI_TBACK_R;          
       if(AI_NORETREAT&&homeDanger&&nearHome&&!engaged&&thrS>0){
@@ -6278,7 +6548,10 @@ function aiMilTickSquads(si){
           if(dv){a.atkTgt=dv;tgt=dv;a.staged=false;a.stageT=0;a.divertN++;a.wtgtB=dv;a.wtgtT=t;distT=Math.hypot(cx-tgt.x,cy-tgt.y);}
         }
         const inZone=distT<=AI_CLUSTER_R; 
-        
+        /* Meeting an enemy on the march means fighting it -- running into an army on the
+           road is not a reason to go home. At the top difficulties a scattered wave pulls
+           back one step to bunch up first, with a timeout so it cannot back up forever;
+           below that it simply engages. */
         let mf=null;
         if(AI_MARCHFIGHT&&!(a.staged&&inZone)){
           let ms=0,mx=0,my=0;
@@ -6300,7 +6573,10 @@ function aiMilTickSquads(si){
         let holding=false;
         if(!AI_FSTAGE)a.staged=true; 
         else if(!a.staged&&inZone){
-          
+          /* Gathering before arrival. A wave counts as gathered when at least 70% of it is
+             within eight tiles of its centroid; otherwise it falls back to the staging post
+             and waits, with a timeout. Changing target mid-march goes through the same
+             sequence: pull back, gather, then attack. */
           const inC=atkU.filter(u=>Math.hypot(u.x-cx,u.y-cy)<=AI_FSTAGE_R).length;
           if(inC>=atkU.length*AI_MUSTER_FRAC){a.staged=true;a.stageT=0;a.stagePt=null;}
           else{
@@ -6324,7 +6600,8 @@ function aiMilTickSquads(si){
             curNib=nib;nibOn=true;}
         }else{a.nibAnch=null;a.nibThin=-1;a.nibN=0;}
         if(a.atkMode==='march'){
-          
+          /* Marching under guard orders rather than attack-move, so the column does not
+             chase every distraction on the way; whether to kite is decided separately. */
           const r=aiPickRoute(si);let via=tgt;
           if(r&&Math.hypot(tgt.x-hub.x,tgt.y-hub.y)>TILE*16&&Math.hypot(cx-hub.x,cy-hub.y)<Math.hypot(r.rally.x-hub.x,r.rally.y-hub.y)-TILE*2)via=r.rally;
           aiOrder(si,AI_G.main,via.x,via.y,'guard');
@@ -6419,7 +6696,11 @@ function aiEcoTarget(si,hub,far,vary,weak){
   if(vary&&cands.length>1)return cands[(rng()*Math.min(3,cands.length))|0].b;
   return cands[0].b;
 }
-
+/* Scouts explore by default even at the top difficulty; only when the picture of
+   the enemy base has gone stale is one scout manually sent to an observation point
+   -- outside the known firing rings, but with line of sight to the enemy centre --
+   for a look. Once it arrives, or the intelligence is fresh again, it goes back to
+   exploring on its own. */
 function aiObsPt(si,tgt){ 
   const hub=aiHub(si);if(!hub)return null;
   let defR=0;
@@ -6466,7 +6747,10 @@ function aiScoutCtl(si){
     const dd=(s.x-o.x)**2+(s.y-o.y)**2;if(dd<pd){pd=dd;pick=s;}}
   if(pick){pick.mode='explore';pick.pt=null;pick.quarry=null;pick.expT={x:o.x,y:o.y};pick.manual=true;pick.aiDir=true;pick.repathT=999;if(safe)a.scDirId=pick.id;}
 }
-
+/* Known enemy defensive strength near a point: sighted fortifications, weighted,
+   plus sighted troops. It reads only that side's own intelligence, so unscouted
+   ground scores zero -- picking the weak point is what scouting buys, not a peek at
+   the map. */
 function aiDefScore(si,x,y){
   let ds=0;
   for(const b of buildings)if(b.side!==si&&b.hp>0&&BT[b.type].rng&&aiKnowsB(si,b)
@@ -6481,8 +6765,14 @@ function aiPickRoute(si){
   const bias=a.plan?a.plan.routeBias%a.routes.length:0;
   return rng()<0.55?a.routes[bias]:a.routes[(rng()*a.routes.length)|0];
 }
-
-
+/* Reading the opponent's civilisation from its tells: sighting a unique unit or a
+   starred effect identifies it, from hard upwards. The very top difficulty is
+   handicapped here, and says so: once the opponent has committed, sighting any of
+   their units or buildings reveals the civilisation -- army composition and
+   positions still have to be scouted.
+   Once identified it is never forgotten: a commitment is durable intelligence. */
+/* Tells and counters are derived from the unit and civilisation tables, so adding
+   either is adding a row. */
 function aiCivGuess(si,foeU){
   const a=A(si),d=aiD(si);
   if(!d.civRead||a.civBlind||a.civGuess)return a.civGuess; 
@@ -6526,7 +6816,7 @@ function aiTick(dt){
   }
 }
 
-
+/* ============ 10. Orders and production ============ */
 function foeAt(wx,wy,r){
   let best=null,bd=r;
   for(const e of units)if(e.side===1&&e.hp>0&&tileVis(e.x,e.y)){
@@ -6535,7 +6825,12 @@ function foeAt(wx,wy,r){
     const d=Math.hypot(b.x-wx,b.y-wy)-b.size*TILE/2;if(d<bd){bd=d;best=b;}}
   return best;
 }
-
+/* Formation placement: forward is the line from the group's centroid to the target,
+   and ranks are ordered by weapon reach -- melee at the front as a shield wall,
+   ranged progressively behind, medics last. Units with the same reach share a rank;
+   a loose formation widens both spacing and depth.
+   Only the destinations are computed here. Each unit still walks there under its
+   own pathing, so the formation assembles as it moves. */
 function formationTargets(g,us,wx,wy){
   const map=new Map();if(!us.length)return map;
   const cx=us.reduce((s,u)=>s+u.x,0)/us.length,cy=us.reduce((s,u)=>s+u.y,0)/us.length;
@@ -6641,7 +6936,8 @@ function cancelUpgrade(b){
   for(const k in BT[b.type].upgC)stk[k]+=BT[b.type].upgC[k];
   b.upging=false;b.upgP=0;if((b.side||0)===0){alertMsg('white',STR.msg_cancelQ);sndClick();}return true;
 }
-
+/* Market rates drift with trading (selling pushes the price down, buying up) and
+   slowly return to par. Rates are per side, so each pays for its own trading. */
 function mkSell(k,si){
   si=si||0;const stk=stockOf(si),pi=S_(si).priceIdx,md=modOf(si);
   if(stk[k]<100)return;
@@ -6679,7 +6975,11 @@ function tryDeploy(wx,wy){
   deploySettlerU=null;placing=null;updateBuildRow();
   alertMsg('white',STR.ui_deployGo);sndClick();
 }
-
+/* The explored gate for placement, per side and read through the vision gate; under
+   omniscience everything counts as explored, symmetrically for both sides.
+   The previous form was written for a specific side and, with honest vision on,
+   left the other side unable to place a single building anywhere. It went unnoticed
+   only because omniscience happened to be the default at the time. */
 function aiExplored(si,i){return aiFullVision||!!expOf(si)[i];}
 function canPlace(type,tx,ty,ori,si){si=si||0;
   const fp=fpOf(type,ori);
@@ -6706,7 +7006,9 @@ function canPlace(type,tx,ty,ori,si){si=si||0;
   }
   return true;
 }
-
+/* Wall runs follow a Manhattan path, so there are no diagonal gaps. Each tile is
+   paid for separately, unbuildable tiles are skipped, and the placement mode stays
+   active so several runs can be laid in a row. */
 function wallPath(tx0,ty0,tx1,ty1){
   const out=[];let x=tx0,y=ty0,g=0,ph=hgtI(idx(x,y));
   while(g++<300){
@@ -6753,7 +7055,12 @@ function tryPlace(wx,wy){
   else alertMsg('white',fmt(STR.msg_construct,{b:BT[type].nm}));
   sndClick();
 }
-
+/* ============ AI command whitelist ============
+   The rule-based AI may only act on the world through this set -- the player's own
+   commands, parameterised by side. It never touches unit internals, never teleports
+   anything, never conjures resources. Placement, affordability, unlock, age and
+   starvation checks apply to it exactly as to the player, and a handicapped tier
+   only changes disclosed numbers rather than bypassing a check. */
 function placeCmd(si,type,tx,ty,ori){ 
   si=si||0;
   if(!BT[type]||!buildingUnlocked(type,si))return null;
@@ -6800,19 +7107,24 @@ const AICMD={
    markForest:(si,tx,ty,on)=>markForestComp(tx,ty,si,on),
   
 };
-
+/* Building hit test by footprint rectangle, so a 2x1 gate resolves correctly. */
 function buildAt(wx,wy,playerOnly){
   return buildings.find(o=>(!playerOnly||o.side===0)&&o.hp>0&&
     wx>=o.tx*TILE&&wx<(o.tx+(o.w||o.size))*TILE&&wy>=o.ty*TILE&&wy<(o.ty+(o.h||o.size))*TILE);
 }
-
+/* Demolition refund: full while still under construction (same as cancelling), and
+   half, scaled by remaining health, once finished -- so a clean demolition recovers
+   something and a damaged building recovers less. */
 function demoRefund(b){
   const base=BT[b.type].cost||BT[b.type].rc||{},out={};
   if(!b.done){if(b.bySettler)return out;for(const k in base)out[k]=base[k];}  
   else{const r=Math.max(0,Math.min(1,b.hp/b.maxHp));for(const k in base)out[k]=Math.floor(base[k]*0.5*r);}
   return out;
 }
-
+/* Demolishing or cancelling a building. The last command centre cannot be
+   demolished, so nobody loses by accident. It clears the footprint, ejects the
+   garrison and releases any villagers assigned to build or repair it -- otherwise
+   they chase a site that no longer exists. */
 function demolishBuild(b){
   if(!b||b.side!==0)return false;
   if(BT[b.type].cc&&!buildings.some(o=>o!==b&&o.side===0&&o.hp>0&&BT[o.type].cc)){
@@ -6842,7 +7154,10 @@ function askDemolish(b){
 }
 function closeDemo(){pendingDemo=null;q('#demoConfirm').classList.add('hidden');}
 
-
+/* Ships repair slowly near a friendly dock, for free, and more slowly than a
+   monastery heals. It replaces having villagers repair ships, which they cannot
+   reach over water, and makes sailing a damaged ship home a real decision. Nothing
+   repairs while in contact with the enemy. */
 const DOCK_HEAL=0.9,DOCK_HEAL_R=TILE*3;
 function dockRepairTick(dt){
   const docks=buildings.filter(b=>b.type==='dock'&&b.hp>0&&b.done);
@@ -6855,7 +7170,7 @@ function dockRepairTick(dt){
   }
 }
 
-
+/* ============ 11. Main loop ============ */
 function step(dt){
   if(gameOver)return;
   t+=dt;
@@ -6954,7 +7269,7 @@ function endGame(win){
   q('#overlay').classList.remove('hidden');
 }
 
-
+/* ============ 12. Rendering ============ */
 const cv=q('#cv'),ctx=cv.getContext('2d');
 let dpr=1,vw=0,vh=0;
 const cam={x:0,y:0,z:0.7};
@@ -6971,9 +7286,12 @@ function clampCam(){
 }
 clampCam();
 
-
+/* Offscreen terrain canvas. */
 const tcv=document.createElement('canvas');tcv.width=W;tcv.height=H;
-
+/* 2.5D cliff faces. A purely 2D cliff is a zero-width line, which is both where
+   corner-cutting comes from and why it looks cheap. Here highland gets a real rock
+   face drawn along every edge against non-highland (the southern edge, facing the
+   camera, most prominently), with a lit lip and a cast shadow. */
 function paintTerrain(){
   const c=tcv.getContext('2d');c.clearRect(0,0,W,H);
   const cols={[T_PLAIN]:'#2c4423',[T_HIGH]:'#55653b',[T_RAMP]:'#5d6c3e',[T_FOREST]:'#1c3a1e',[T_SWAMP]:'#27413c',[T_WATER]:'#1d3a5c',[T_SHALLOW]:'#34657a',[T_BRIDGE]:'#6b5436'};
@@ -7033,7 +7351,10 @@ function render(){
   ctx.setTransform(z,0,0,z,-cam.x*z,-cam.y*z);
   ctx.drawImage(tcv,0,0);
   ctx.textAlign='center';ctx.textBaseline='middle';
-  
+  /* Viewport culling. Entities off screen are clipped by the canvas anyway, but each
+     still costs a round of fill, stroke and text calls -- a fixed waste that grows
+     with the army. The margin is generous enough that health bars, labels and group
+     rings are never clipped at the edge. */
   const vL=cam.x-96,vT=cam.y-96,vR=cam.x+vw/cam.z+96,vB=cam.y+vh/cam.z+96;
   const onScr=e=>e.x>=vL&&e.x<=vR&&e.y>=vT&&e.y<=vB;
   
@@ -7171,7 +7492,11 @@ function render(){
     ctx.beginPath();ctx.moveTo(nudgeU.x,nudgeU.y);ctx.lineTo(nudgeGhost.x,nudgeGhost.y);ctx.stroke();
     ctx.setLineDash([]);ctx.beginPath();ctx.arc(nudgeGhost.x,nudgeGhost.y,9,0,7);ctx.stroke();ctx.globalAlpha=1;}
   ctx.lineWidth=1.5;ctx.globalAlpha=.55;ctx.setLineDash([4,4]);
-  
+  /* Only our own drag paths are drawn. Nudges are set not just by the player's
+     gesture but by the automatic unstick logic, for both sides -- so an enemy unit
+     freeing itself would draw a dotted line and a destination ring inside the fog,
+     giving away both its position and where it was going. Spectator mode is omniscient
+     by definition, so it may draw them. */
   const nf=u=>{ctx.beginPath();ctx.moveTo(u.x,u.y);ctx.lineTo(u.nudge.x,u.nudge.y);ctx.stroke();ctx.beginPath();ctx.arc(u.nudge.x,u.nudge.y,6,0,7);ctx.stroke();};
   const nfOK=e=>e.nudge&&((e.side||0)===0||spectate);
   for(const u of units)if(nfOK(u))nf(u);
@@ -7217,7 +7542,10 @@ function render(){
         ctx.fillRect(tx*TILE,ty*TILE,fp.w*TILE,fp.h*TILE);}
     }
   }
-  
+  /* Fog is drawn for visible tiles only. Sweeping the whole map every frame cost
+     nearly ten thousand fill calls per frame regardless of what was on screen -- and
+     twice that while spectating, which is why long spectated games grew steadily
+     choppier. */
   const fx0=Math.max(0,(cam.x/TILE|0)-1),fy0=Math.max(0,(cam.y/TILE|0)-1),
         fx1=Math.min(TW-1,((cam.x+vw/cam.z)/TILE|0)+1),fy1=Math.min(TH-1,((cam.y+vh/cam.z)/TILE|0)+1);
   if(spectate){ 
@@ -7257,7 +7585,7 @@ function render(){
     }
   }
 }
-
+/* Minimap. */
 const mm=q('#mm'),mctx=mm.getContext('2d');
 const mcv=document.createElement('canvas');mcv.width=192;mcv.height=108;
 (function(){const c=mcv.getContext('2d');c.drawImage(tcv,0,0,192,108);})();
@@ -7296,7 +7624,7 @@ function renderMM(){
   mctx.strokeRect(cam.x*sx,cam.y*sy,vw/cam.z*sx,vh/cam.z*sy);
 }
 
-
+/* ============ 13. Camera and canvas input ============ */
 let ghostW=null;
 const pts=new Map();
 let panMoved=false,pinchD=0,nudgeU=null,nudgeDown=null,nudgeMoved=false,nudgeGhost=null; 
@@ -7442,7 +7770,7 @@ function updateHUD(){
   fb.classList.toggle('hidden',!foodWarn||starving); 
   if(foodWarn&&!starving)fb.textContent=fmt(STR.ban_foodDeficit,{u:Math.ceil(curUpkeep*60),p:Math.floor(foodRate*60)}); 
 }
-
+/* Group tag bar. */
 const tagbar=q('#tagbar');
 function renderTagbar(){
   tagbar.innerHTML='';
@@ -7455,7 +7783,7 @@ function renderTagbar(){
   });
 }
 renderTagbar();
-
+/* Scout bar. */
 const scoutbar=q('#scoutbar');
 function renderScoutbar(){
   scoutbar.innerHTML='';
@@ -7470,7 +7798,7 @@ function renderScoutbar(){
 }
 renderScoutbar();
 setInterval(()=>{renderTagbar();renderScoutbar();},1500);
-
+/* Dragging a group tag issues an order; dropping it on a building garrisons. */
 const ghost=q('#dragGhost');
 tagbar.addEventListener('pointerdown',e=>{
   const chip=e.target.closest('.tagChip');if(!chip)return;
@@ -7530,7 +7858,8 @@ scoutbar.addEventListener('pointerdown',e=>{
   window.addEventListener('pointermove',move);
   window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);
 });
-
+/* Panel opening and periodic refresh (a group panel with a slider being dragged is
+   not refreshed, so the interaction is not interrupted). */
 let panelRefresh=null,auraShow=null,selUnit=null,prodB=null; 
 function closePanels(){q('#tagPanel').classList.add('hidden');q('#bldPanel').classList.add('hidden');
   q('#scPanel').classList.add('hidden');panelRefresh=null;auraShow=null;selUnit=null;prodB=null;
@@ -7538,7 +7867,9 @@ function closePanels(){q('#tagPanel').classList.add('hidden');q('#bldPanel').cla
   q('#ecoPanel').classList.add('hidden');q('#buildPanel').classList.add('hidden');
   q('#tabEco').classList.remove('on');q('#tabBuild').classList.remove('on');
   if(placing){placing=null;wallStart=null;deploySettlerU=null;deployTrapU=null;updateBuildRow();}}
-
+/* Periodic redraws pause while a finger or mouse button is down: otherwise a
+   rebuild swaps the button out mid-click, and the first tap on a panel appears to
+   do nothing. */
 let pointerDownN=0;
 addEventListener('pointerdown',()=>{pointerDownN++;},true);
 addEventListener('pointerup',()=>{pointerDownN=Math.max(0,pointerDownN-1);},true);
@@ -7612,7 +7943,8 @@ function openTagPanel(ti){
   });
 }
 
-
+/* Production queue: each entry shows the unit and its group colour, the first is
+   filled to show progress, and tapping cancels it with a refund. */
 function renderBQ(b,p){
   const row=p.querySelector('#bqRow');if(!row)return;
   row.innerHTML='';
@@ -7632,7 +7964,8 @@ function renderBQ(b,p){
     row.appendChild(d);
   });
 }
-
+/* Production panel, shared by barracks, stable and workshop: the unit table itself
+   says which building trains what, so the panel filters on that. */
 function openProdPanel(b){
   if(b.hp<=0){closePanels();return;}
   closePanels();
@@ -7674,7 +8007,7 @@ function openProdPanel(b){
   };
   panelRefresh=()=>{if(b.hp<=0){closePanels();return;}renderBQ(b,p);};
 }
-
+/* Garrison composition summary. */
 function garComp(b){
   const parts=[];
   if(b.g)parts.push(`👤×${b.g}`);
@@ -7682,7 +8015,8 @@ function garComp(b){
   for(const k in cnt)parts.push(`${UT[k].ch}×${cnt[k]}`);
   return parts.length?parts.join(' '):STR.ui_empty;
 }
-
+/* Command centre queue for villagers and scouts, behaving exactly like the barracks
+   queue and read per building. */
 function renderCCQ(b,p){
   const row=p.querySelector('#tcqRow');if(!row)return;
   row.innerHTML='';
@@ -7704,12 +8038,15 @@ function renderCCQ(b,p){
     row.appendChild(d);
   });
 }
-
+/* Command centre panel, shared by the capital, outposts and cities: villagers
+   everywhere, scouts where production is full, garrisoning, and upgrading an outpost
+   into a city. */
 function openCCPanel(b){
   if(b.hp<=0){closePanels();return;}
   closePanels();
   const T=BT[b.type],p=q('#bldPanel');
-  
+  /* The button badge counts this centre's own queue; the population cap and the HUD
+     use the global count. */
   const vq=b.cq.filter(it=>it.u==='villager').length,sq=b.cq.filter(it=>it.u==='scout').length,setq=b.cq.filter(it=>it.u==='settler').length,full=T.prod==='full';
   let html=`<span class="closeX" onclick="closePanels()">✕</span>
     <div class="pTitle">${T.nm}${T.life?`（${STR.ui_lives}）`:''}</div>${bldStat(b)}
@@ -7740,7 +8077,8 @@ function openCCPanel(b){
   {const cb=q('#tcUpgCancel');if(cb)cb.onclick=()=>{cancelUpgrade(b);openCCPanel(b);};} 
   panelRefresh=()=>openCCPanel(b);
 }
-
+/* Monastery panel: trains medics and explains the healing aura, whose radius is
+   shown only while the building is selected. */
 function openMonasteryPanel(b){
   if(b.hp<=0){closePanels();return;}
   closePanels();
@@ -7861,7 +8199,9 @@ function openWallPanel(b){
   p.classList.remove('hidden');
   panelRefresh=()=>{if(!b||b.hp<=0){closePanels();return;}openWallPanel(b);};
 }
-
+/* ====== Unit inspector (read-only): tapping one of your units shows its live
+   numbers with research bonuses called out. It issues no orders, keeping to
+   "decisions to the player, execution to the rules". ====== */
 function vJobLabel(v){
   if(v.state==='flee')return STR.vst_flee;
   if(v.state==='retreat')return STR.vst_retreat;
@@ -7892,7 +8232,8 @@ function pickUnitAt(wx,wy){
   for(const u of units)if(u.side!==0&&foeVisible(u))consider(u,24);
   return best;
 }
-
+/* A unique unit is a civilisation tell. What the player reads off the enemy panel
+   is exactly what the AI reads off theirs -- the information is symmetric. */
 const UNIQ_CIV={longbow:'UL',heavyinf:'UH',horsearcher:'UM'};
 function openFoeUnitPanel(u){ 
   closePanels();selUnit=u;
@@ -7917,7 +8258,9 @@ function openFoeUnitPanel(u){
   p.innerHTML=html;p.classList.remove('hidden');
 }
 const specSideChip=si=>`<div class="pSub" style="color:${si===0?'#8db8ff':'#ff9a86'}">${si===0?'🔵 藍方（AI）':'🔴 紅方（AI）'}</div>`; 
-
+/* Spectator mode is an omniscient view and discloses everything: group names,
+   missions, scout modes. The normal enemy panel shows none of it, because that is
+   what scouting is for. */
 const SPEC_G_NM=['主力','守備隊','巡邏隊','艦隊','攻城組','增援隊','資源守衛','佯攻騷擾隊'];
 const SPEC_TASK_NM={guard:'駐守',patrol:'巡邏',attack:'進攻',hold:'堅守'};
 const SPEC_SCOUT_NM={explore:'探索',sentry:'哨戒',observe:'觀察'};
@@ -7982,7 +8325,9 @@ function openUnitPanel(u){
     const upk=(T.up||0)*techMod.upkeep,ud=techMod.upkeep<1?'↓':'';
     const bnm=k=>UT[k]?UT[k].nm:(k==='building'?'建築':k==='raid'?'農田/萌芽林/漁籠':k); 
     const bns=T.bonus?Object.entries(T.bonus).map(([k,v])=>`${bnm(k)}×${k==='raid'?(v*techMod.raidDmg)+(techMod.raidDmg>1?'↑':''):v}`).join('、'):STR.ui_carryNone;
-    
+    /* Range token: ranged units show the projectile range, medics their healing
+       distance, and melee units just say "melee" -- their engagement distance is not a
+       projectile range and printing a number invites the wrong comparison. */
     const rTok=T.medic?fmt(STR.ui_rngHeal,{r:MED_HEAL_R}):proj?fmt(STR.ui_rngRanged,{r:T.rng}):STR.ui_atkMelee;
     html+=`<div class="pTitle">${fmt(STR.ui_uTitle,{ic:T.ch,nm:T.nm,h:Math.ceil(u.hp),mx:u.maxHp})}</div>`;
     if(T.medic)html+=`<div class="pSub">${STR.ui_uMedic}</div>`;
@@ -8035,14 +8380,15 @@ function setScoutMode(s,m){
   s.lastSeen=null;s.manual=false;
   s.pt={x:s.x,y:s.y};
 }
-
+/* Left-hand panels. */
 const tabEco=q('#tabEco'),tabBuild=q('#tabBuild');
 
 tabEco.onclick=()=>{const show=q('#ecoPanel').classList.contains('hidden');closePanels();
   if(show){q('#ecoPanel').classList.remove('hidden');tabEco.classList.add('on');}sndClick();};
 tabBuild.onclick=()=>{const show=q('#buildPanel').classList.contains('hidden');closePanels();
   if(show){q('#buildPanel').classList.remove('hidden');tabBuild.classList.add('on');}sndClick();};
-
+/* The tech tree is a read-only full-page reference. The civilisation being viewed
+   is for browsing only and does not affect play. */
 let techCiv=CIVS[0];
 let isMultiplayer=false,techPaused=false; 
 function openTechTree(){renderTechTree();q('#techOverlay').classList.remove('hidden');if(!isMultiplayer)techPaused=true;sndClick();}
@@ -8066,7 +8412,8 @@ function renderTechTree(){
     `<span class="sw">${STR.ui_techStr}</span>：${techCiv.str}　`+
     `<span class="sw">${STR.ui_techWeak}</span>：${techCiv.weak}　`+
     `<span class="sw">${STR.ui_techSig}</span>：${techCiv.sig}`;
-  
+  /* Action row: your own civilisation offers age advancement and the research queue;
+     viewing another offers switching to it. */
   const act=q('#techActions');act.innerHTML='';
   if(mine){
     const a=AGES[playerTech.age],ageBox=document.createElement('div');ageBox.className='techAgeBox';
@@ -8144,7 +8491,7 @@ q('#demoYes').textContent=STR.demo_yes;q('#demoNo').textContent=STR.demo_no;
 q('#demoYes').onclick=()=>{const b=pendingDemo;closeDemo();if(b)demolishBuild(b);};
 q('#demoNo').onclick=()=>{closeDemo();sndClick();};
 q('#demoConfirm').addEventListener('pointerdown',e=>{if(e.target===q('#demoConfirm')){closeDemo();sndClick();}}); 
-
+/* Gathering split. */
 const rowsEl=q('#ratioRows');
 for(const r of RES){
   const row=document.createElement('div');row.className='ratioRow';
@@ -8169,8 +8516,12 @@ function updateRatioUI(){
   }
 }
 updateRatioUI();
-
-
+/* Villagers are produced solely from the command centre queues, so the economy
+   panel has no production button -- one place to look, and no unresponsive-feeling
+   second entry point sharing the same queue. */
+/* Villager behaviour, two tracks: the bell for peacetime, and under attack a repair
+   toggle, a garrison toggle and a three-way stance. The under-attack row reads left
+   to right in priority order, matching the heading. */
 const behavEl=q('#behav');
 const STANCES=['flee','fight','gather'];
 const STANCE_NM={flee:STR.bh_flee,fight:STR.card_fight,gather:STR.bh_diehard};
@@ -8198,7 +8549,7 @@ behavEl.addEventListener('click',e=>{
   else return;
   renderBehavior();sndClick();
 });
-
+/* Build bar. */
 function updateBuildRow(){
   const row=q('#buildRow');row.innerHTML='';
   const list=['farm','coppice','outpost','market','barracks','stable','smith','monastery','tower','dock','wall','gate','castle']; 
@@ -8223,7 +8574,7 @@ function updateBuildRow(){
   q('#rotBtn').classList.toggle('hidden',placing!=='gate'); 
 }
 updateBuildRow();
-
+/* Alerts. */
 const alertsEl=q('#alerts');
 let lastAlert={txt:'',at:-9},lastPing=-9;
 function alertMsg(cls,txt){
@@ -8239,7 +8590,8 @@ function pingAlert(x,y,col,txt){
   if(txt)alertMsg(col,txt);
   else if(t-lastPing>4){lastPing=t;alertMsg('red',STR.msg_attacked);sndAlert();}
 }
-
+/* == Development tooling UI: coordinate readout, movement log, and the debug
+   toggle == */
 const TNAME=['平地','高地','坡道','森林','沼澤'];
 function updateCoordHud(){
   if(!dbgMode)return;
@@ -8297,13 +8649,16 @@ q('#dbgTraceBtn').onclick=()=>{setTrace();sndClick();};
 q('#dbgSaveBtn').onclick=()=>{saveLog();sndClick();};
 q('#dbgClearBtn').onclick=()=>{mlog.length=0;traceLog.length=0;dbgPick=null;renderDbgLog();sndClick();};
 q('#dbgMiniBtn').onclick=()=>{const mini=q('#dbgLog').classList.toggle('mini');q('#dbgMiniBtn').textContent=mini?'▸ 展開':'▾ 縮小';sndClick();}; 
-
+/* One tools button in the bottom-left corner, away from the information panels on
+   the right so it never covers them. */
 function toggleTools(open){const m=q('#toolsMenu');const show=open===undefined?m.classList.contains('hidden'):open;
   m.classList.toggle('hidden',!show);q('#toolsBtn').classList.toggle('on',show);}
 q('#toolsBtn').onclick=()=>{toggleTools();sndClick();};
 function rotateGate(){if(placing!=='gate')return;placeOri=placeOri==='v'?'h':'v';sndClick();} 
 q('#rotBtn').onclick=rotateGate;
-
+/* == Arena: test battles on flat ground with no economy and no interference.
+   Pick a matchup, the two armies charge, and rerunning the same one repeatedly is
+   how the probabilistic parts (hit chance and the rest) get measured. == */
 const ARENA_PRESETS=[
   ['槍vs槍',{spear:6},{spear:6}],
   ['弓vs槍',{archer:6},{spear:8}],
@@ -8333,7 +8688,10 @@ function arenaSetup(comp0,comp1){
   const w0=Object.keys(comp0||{}),w1=Object.keys(comp1||{});
   const allTypes=[...w0,...w1];
   const naval=allTypes.length>0&&allTypes.every(wat); 
-  
+  /* Shoreline arena: land units on one side, ships on the other, with the map split
+     down the middle into land and water so the two shoot at each other across the
+     shore. It is the only way to measure land ranged units against warships at equal
+     cost -- a purely land or purely naval arena cannot cross domains. */
   const aw0=w0.every(wat),aw1=w1.every(wat),al0=w0.every(k=>!wat(k)),al1=w1.every(k=>!wat(k));
   const shore=!naval&&w0.length>0&&w1.length>0&&((aw0&&al1)||(al0&&aw1)); 
   const seaLeft=shore&&aw0; 
@@ -8342,7 +8700,10 @@ function arenaSetup(comp0,comp1){
   blocked.fill(0);wallMask.fill(0);gateMask.fill(0);paintTerrain();
   if(shore){computeLandComp();pathCompDirty=true;} 
   const cy=13*TILE+TILE/2,mid=24*TILE;
-  
+  /* In a shoreline arena neither side can chase the other, so both armies have to
+     start inside each other's range. Spawned any further apart, they simply freeze at
+     the edge of their search radius and every match is a draw -- which is exactly what
+     happened the first time. */
   const cxL=shore?mid-TILE*1.5:12*TILE,cxR=shore?mid+TILE*1.5:36*TILE;
   const p0=shore?{x:cxL,y:cy}:{x:mid,y:cy},p1=shore?{x:cxR,y:cy}:{x:mid,y:cy};
   const g0=tags[0],g1=tags[5];
@@ -8383,7 +8744,10 @@ function arenaSetup(comp0,comp1){
      if(nxId==='land')u.searchParams.delete('map');else u.searchParams.set('map',nxId);location.href=u.href;};}
   q('#arenaReplay').onclick=()=>{if(arenaLast)arenaSetup(arenaLast[0],arenaLast[1]);sndClick();};
   q('#arenaExit').onclick=()=>location.reload();
-  
+  /* Difficulty disclosure text, shared by the settings panel and the title screen so
+     the two cannot describe the same thing differently.
+     The list is generated from the difficulty table rather than written by hand:
+     hand-written, it silently omitted every handicap added afterwards. */
   function diffDisclose(k){const d=AI_DIFF[k],cheats=[];
     if(d.gather>1)    cheats.push(`採集 ×${d.gather}`);
     if(d.tech>0)      cheats.push(`M 線攻防 +${d.tech} 階`);
@@ -8395,7 +8759,12 @@ function arenaSetup(comp0,comp1){
       :'公平級：與你同規則、同視野（兵力位置/組成一律偵察）、同價格。')
       +scale+(AI_DIFF_ORDER.indexOf(k)>=3?'會派斥候偵察＋多線騷擾。':'');}
   window.__diffDisclose=diffDisclose;
-  
+  /* Whether the opponent's civilisation can be chosen: yes below hard, random above.
+     Scouting is a designed decision -- identifying a committed civilisation on sight
+     is listed as a handicap for the very top difficulty. Letting the player pick it
+     from a menu would hand them that same intelligence for free and make scouting the
+     opponent's buildings pointless. The lower difficulties are practice, where
+     choosing a matchup is the point. */
   const aiCivPickable=k=>AI_DIFF_ORDER.indexOf(k)<3;
   window.__aiCivPickable=aiCivPickable;
   
@@ -8452,7 +8821,7 @@ function arenaSetup(comp0,comp1){
   
   q('#specPause').onclick=()=>{setPaused();sndClick();};
   q('#specExit').onclick=()=>{const u=new URL(location.href);u.searchParams.delete('spectate');location.href=u.href;};
-  
+  /* Fast-forward: enter a time, jump to it, pause automatically. Forward only. */
   const doSeek=()=>{const v=+q('#specSeekIn').value;const inp=q('#specSeekIn');
     if(v>Math.floor(t)){seekT=v;setPaused(false);inp.style.borderColor='';}
     else{inp.style.borderColor='#c66';setTimeout(()=>{inp.style.borderColor='';},900);} 
@@ -8479,7 +8848,7 @@ function dbgMark(x,y){
     logEvt('標記',e,`${kind}距${Math.round(d)} 徑${e.path?e.path.length:0}${e.state?' '+e.state:''}${e.job?' '+e.job:''}${e.dest?' 有dest':''}`);}
   else logEvt('標記',{side:0,x,y},'空地');
 }
-
+/* ============ 15. Audio ============ */
 let AC=null;
 function ac(){if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();return AC;}
 document.addEventListener('pointerdown',()=>{try{ac().resume();}catch(e){}},{once:true});
@@ -8492,7 +8861,7 @@ function beep(f,d,g,type){try{const c=ac();
 function sndClick(){beep(520,.05,.025);}
 function sndAlert(){beep(880,.12);setTimeout(()=>beep(660,.2),130);}
 
-
+/* ============ 16. Startup ============ */
 rebalance();updateFog();
 let last=performance.now(),accT=0;
 function frame(now){
@@ -8506,7 +8875,8 @@ function frame(now){
   render();updateHUD();
   mmT-=dt;if(mmT<=0){mmT=0.3;renderMM();}
 }
-
+/* URL knobs for difficulty and the AI's civilisation (the real UI is the opponent
+   panel; what each handicapped tier gets is spelled out there). */
 function spectateInit(dA,dB){ 
   spectate=true;
   aiWave=99999;aiDefT=1e9;gameOver=null;aiEco=true; 
@@ -8542,19 +8912,35 @@ function spectateInit(dA,dB){
  if(dv&&AI_DIFF[dv]&&AI_DIFF[dv].gather>1)console.log(`[AI] 作弊級 ${AI_DIFF[dv].nm}：採集 ×${AI_DIFF[dv].gather}、M 線攻防 +${AI_DIFF[dv].tech} 階（明示）`);
  if(qp.get('spectate')==='1')spectateInit(qp.get('diff0')||dv||'hard',dv||'hard');}
 requestAnimationFrame(frame);
-
+/* ============ 16. Save snapshots (state, not replay) ============
+   Why not seed plus replay: a replay file is invalidated wholesale by every balance
+   change, and what a player wants saved is the position in front of them.
+   So the whole object graph is serialised. The hard part is not choosing fields, it
+   is the cross-references -- a unit's target is another unit, a building's garrison
+   points back at its occupants -- which is what the three registries below exist to
+   rebuild. */
 const SNAP_V=1,SNAP_SLOTS=3;
 const snapKey=i=>'rts.snap.'+i,snapMKey=i=>'rts.snapM.'+i,SNAP_PEND='rts.snap.pending';
-
+/* Opened from the title screen the panel is read-only: loading, exporting,
+   importing and deleting only. The game behind the title screen has not started, so
+   saving it is meaningless -- and an accidental tap on save would overwrite a real
+   save irrecoverably. */
 let snapHome=false;
 const SNAP_SKIP=Symbol('snapSkip');
 const SNAP_ARRS=()=>({U:units,V:villagers,B:buildings,SC:scouts,ND:nodes,SH:shots,MK:markers,PG:pings,GH:ghosts,MS:misses});
-
+/* The map-level tables worth saving are those that play changes and that are not
+   purely derived.
+   Vision, danger and last-seen are updated on a throttle, a few seconds apart, and
+   must not be recomputed on load: recomputing would advance tiles that were not due
+   yet, leaving the world one throttle phase away from where it was saved. That
+   breaks determinism, and the fingerprint test catches it. */
 const SNAP_MAPS=()=>({terr,blocked,gateMask,wallMask,logMark,forestWood,
   visible,explored,visibleE,exploredE,unreachable,unreachableE,
   dangerMask,dangerMaskE,dangerMem,dangerMemE,lastSeenT,lastSeenTE});
 const SNAP_TA={Uint8Array,Int8Array,Uint8ClampedArray,Int16Array,Uint16Array,Int32Array,Uint32Array,Float32Array,Float64Array};
-
+/* Byte-level PackBits RLE plus base64. Terrain, fog and forest tables are mostly
+   long runs of one value, so they compress to a few percent -- uncompressed they
+   would add roughly 150KB per save. */
 function snapB64(u8){let s='';for(let i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));return btoa(s);}
 function snapB64d(str){const b=atob(str),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
 function snapPack(ta){
@@ -8576,7 +8962,8 @@ function snapUnpackInto(str,ta){
   }
   return o;
 }
-
+/* Registry 1: static tables, keyed by path string. Within one build, loading is
+   deterministic, so both save and load compute the same set of paths. */
 let SNAP_SR=null,SNAP_SRr=null;
 function snapStatics(){
   if(SNAP_SR)return;
@@ -8589,7 +8976,9 @@ function snapStatics(){
   };
   for(const k in roots)walk(roots[k],k,0);
 }
-
+/* Registry 3: containers, computed on both sides at run time, so a token resolves
+   to the live object and can be refilled in place -- which is what keeps the module-
+   level aliases pointing at something real. */
 function snapConts(){
   const o=[];
   for(let s=0;s<2;s++){
@@ -8701,7 +9090,8 @@ function snapApply(sn){
   renderTagbar();updateBuildRow();updateHUD();renderMM(); 
   return sn;
 }
-
+/* Slot management. A small metadata record is stored under its own key so listing
+   the slots does not have to parse a whole save. */
 function snapLS(){try{return window.localStorage;}catch(e){return null;}}
 function snapList(){
   const ls=snapLS(),out=[];
@@ -8727,7 +9117,9 @@ function snapSave(i){
 function snapRead(i){const ls=snapLS();if(!ls)return null;
   const s=ls.getItem(snapKey(i));return s?JSON.parse(s):null;}
 function snapDel(i){const ls=snapLS();if(!ls)return;ls.removeItem(snapKey(i));ls.removeItem(snapMKey(i));}
-
+/* Loading into a different map records the pending save and reloads at the right
+   map URL: the map is fixed at load time and the world's dimensions derive from it,
+   so a reload is the only correct route. */
 function snapEnter(sn){
   if(sn&&sn.map!==MAP_ID){
     try{sessionStorage.setItem(SNAP_PEND,JSON.stringify(sn));}
@@ -8753,7 +9145,7 @@ function snapExport(i){
  try{p=sessionStorage.getItem(SNAP_PEND);if(p)sessionStorage.removeItem(SNAP_PEND);}catch(e){}
  if(!p)try{const ls=snapLS();if(ls){p=ls.getItem(SNAP_PEND);if(p)ls.removeItem(SNAP_PEND);}}catch(e){}
  if(p)try{snapApply(JSON.parse(p));console.log('[存檔] 已接續');}catch(e){console.warn('[存檔] 讀檔失敗',e);}}
-
+/* Save/load panel, reachable from the tools menu and from the title screen. */
 function snapPanelPaint(){
   const box=q('#saveSlots');if(!box)return;
   const list=snapList(),ro=!!snapNoSaveWhy(); 
