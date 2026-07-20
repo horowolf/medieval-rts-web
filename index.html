@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>RTS 原型 — 切片四：文明系統（第三段：三文明科技樹）</title>
+<title>Medieval RTS — a touch-first real-time strategy prototype</title>
 <style>
   html,body{margin:0;padding:0;height:100%;overflow:hidden;background:#101808;
     font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif;
@@ -264,7 +264,7 @@
 <div id="leftTabs">
   <button class="tabBtn" id="tabEco"></button>
   <button class="tabBtn" id="tabBuild"></button>
-  <button class="tabBtn" id="tabTech" title="文明科技樹（給玩家參考）">📜</button>
+  <button class="tabBtn" id="tabTech" title="Civilisation tech tree (reference)">📜</button>
 </div>
 <div id="ecoPanel" class="panel hidden">
   <div class="pTitle" id="ratioTitle"></div>
@@ -286,64 +286,64 @@
 <div id="alerts"></div>
 <div id="toolsWrap">
   <div id="toolsMenu" class="hidden">
-    <button id="dbgBtn" type="button" title="除錯：座標/路徑/移動log">🐞 除錯</button>
-    <button id="arenaBtn" type="button" title="擂台：測試對戰（平地·無經濟）">⚔️ 擂台</button>
-    <button id="mapBtn" type="button" title="切換地圖：陸戰圖 / 水域圖（重載）">🌊 水域圖</button>
-    <button id="diffBtn" type="button" title="對手難度/文明＋AI 對戰觀戰（重開新局生效）">⚙️ 對手</button>
-    <button id="saveBtn" type="button" title="存檔／讀檔（存在這台裝置·可匯出成檔案）">💾 存讀檔</button>
+    <button id="dbgBtn" type="button" title="Debug: coordinates, paths, movement log">🐞 Debug</button>
+    <button id="arenaBtn" type="button" title="Arena: test battles on flat ground, no economy">⚔️ Arena</button>
+    <button id="mapBtn" type="button" title="Switch map (reloads)">🌊 Map</button>
+    <button id="diffBtn" type="button" title="Opponent difficulty and civilisation, plus AI-vs-AI spectating (starts a new game)">⚙️ Opponent</button>
+    <button id="saveBtn" type="button" title="Save / load (kept on this device, exportable to a file)">💾 Save</button>
   </div>
-  <button id="toolsBtn" type="button" title="除錯工具（除錯／擂台／地圖）">🔧</button>
+  <button id="toolsBtn" type="button" title="Tools: map, opponent, save">🔧</button>
 </div>
 <div id="arenaPanel" class="panel hidden">
-  <div class="pTitle">⚔️ 擂台·測試對戰</div>
+  <div class="pTitle">⚔️ Arena — test battles</div>
   <div id="arenaPresets"></div>
-  <div class="abHead"><span>自訂兵力</span><span class="abLR">左隊 ／ 右隊</span></div>
+  <div class="abHead"><span>Custom armies</span><span class="abLR">left / right</span></div>
   <div id="arenaBuild"></div>
-  <div class="arenaRow"><button id="arenaGo" type="button">▶ 開打</button><button id="arenaReplay" type="button">↻ 重開</button><button id="arenaExit" type="button">✕ 離開</button></div>
-  <div class="arenaHint">點預設＝直接開打；或自訂左右兵數再「開打」。左隊＝你（下方標籤切 攻擊/守備×集中/相剋/打帶跑·可拖單兵）。重開＝同組再來看機率波動。離開＝重載回正常遊戲。</div>
+  <div class="arenaRow"><button id="arenaGo" type="button">▶ Fight</button><button id="arenaReplay" type="button">↻ Rerun</button><button id="arenaExit" type="button">✕ Exit</button></div>
+  <div class="arenaHint">Tap a preset to fight it straight away, or set both armies yourself first. The left side is yours — the tags below switch orders and engagement rules, and single units can be dragged. Rerun repeats the same matchup to see the spread. Exit reloads back into the normal game.</div>
 </div>
 <div id="savePanel" class="panel hidden">
-  <div class="pTitle">💾 存檔／讀檔</div>
+  <div class="pTitle">💾 Save / load</div>
   <div id="saveSlots"></div>
-  <div class="arenaRow"><button id="saveImport" type="button">⤒ 匯入檔案</button><button id="saveClose" type="button">✕ 關閉</button></div>
+  <div class="arenaRow"><button id="saveImport" type="button">⤒ Import file</button><button id="saveClose" type="button">✕ Close</button></div>
   <div id="saveMsg"></div>
-  <div class="arenaHint">存檔存在<b>這台裝置的瀏覽器</b>裡（不會上傳）。⚠️ iPhone/iPad 的 Safari 約 <b>7 天沒開這個網站就會自動清掉</b>——重要進度請按 <b>⤓</b> 匯出成檔案留一份（也是換裝置的方法）。讀檔＝從存檔當下接著玩。</div>
+  <div class="arenaHint">Saves live in <b>this browser on this device</b> and are never uploaded. ⚠️ Safari on iPhone/iPad clears them after roughly <b>7 days without visiting the site</b> — press <b>⤓</b> to export anything you want to keep (that is also how you move a game to another device). Loading resumes exactly where the save was taken.</div>
   <input id="saveFile" type="file" accept=".rtssave,.json,application/json" style="display:none">
 </div>
 <div id="homeScr" class="hidden"><div id="homeBox">
-  <h1>⚔️ 中世紀 RTS</h1>
-  <div class="homeSub">想得好的人贏過點得快的人</div>
-  <div class="homeLb">地圖</div><div class="rowBtns" id="homeMapRow"></div>
-  <div class="homeLb">對手難度</div><div class="rowBtns" id="homeDiffRow"></div>
-  <div class="homeLb">敵方文明</div><div class="rowBtns" id="homeAiCivRow"></div>
-  <div class="homeLb">隨機種子（空白＝預設局·同種子＝同一場開局抽籤）</div>
-  <input id="homeSeed" type="number" min="0" step="1" placeholder="例 20260709">
+  <h1>⚔️ Medieval RTS</h1>
+  <div class="homeSub">Thinking well beats clicking fast</div>
+  <div class="homeLb">Map</div><div class="rowBtns" id="homeMapRow"></div>
+  <div class="homeLb">Difficulty</div><div class="rowBtns" id="homeDiffRow"></div>
+  <div class="homeLb">Opponent civilisation</div><div class="rowBtns" id="homeAiCivRow"></div>
+  <div class="homeLb">Random seed (blank = the default game; the same seed always deals the same opening)</div>
+  <input id="homeSeed" type="number" min="0" step="1" placeholder="e.g. 20260709">
   <div class="homeHint" id="homeHint"></div>
-  <button id="homeGo" type="button">▶ 開始遊戲</button>
-  <button id="homeLoad" type="button" style="width:100%;margin-top:7px;padding:8px;font-size:13px;">📂 讀取存檔</button>
-  <div class="homeFoot">開局後仍可用 ⚙️ 換對手、🗺 換地圖（都＝重開新局）、🔧→💾 存檔。</div>
+  <button id="homeGo" type="button">▶ Start game</button>
+  <button id="homeLoad" type="button" style="width:100%;margin-top:7px;padding:8px;font-size:13px;">📂 Load a save</button>
+  <div class="homeFoot">In game you can still use ⚙️ to change opponent and 🗺 to change map (both start a new game), and 🔧→💾 to save.</div>
 </div></div>
 <div id="diffPanel" class="panel hidden">
-  <div class="pTitle">⚙️ 對手設定（套用＝重開新局）</div>
-  <div class="pTitle" style="opacity:.75;margin-top:5px">難度（目前：<span id="diffCur"></span>）</div>
+  <div class="pTitle">⚙️ Opponent (applying starts a new game)</div>
+  <div class="pTitle" style="opacity:.75;margin-top:5px">Difficulty (now: <span id="diffCur"></span>)</div>
   <div class="rowBtns" id="diffRow"></div>
-  <div class="pTitle" style="opacity:.75">敵方文明</div>
+  <div class="pTitle" style="opacity:.75">Opponent civilisation</div>
   <div class="rowBtns" id="civRow"></div>
   <div class="diffHint" id="diffHint"></div>
-  <div class="arenaRow"><button id="diffGo" type="button">▶ 重開對局</button><button id="specGo" type="button" title="雙方都交給 AI·你全視野旁觀（藍紅淺霧＝各自視野）">👁 AI 對戰觀戰</button><button id="diffClose" type="button">✕</button></div>
+  <div class="arenaRow"><button id="diffGo" type="button">▶ New game</button><button id="specGo" type="button" title="Both sides played by the AI while you watch with full vision (the blue/red haze is each side's blind area)">👁 Watch AI vs AI</button><button id="diffClose" type="button">✕</button></div>
 </div>
-<div id="specBar" class="panel hidden"><b>👁 觀戰</b><span id="specClock"></span><span id="specInfo"></span><input id="specSeekIn" type="number" min="0" step="10" placeholder="秒" title="輸入秒數→快轉到該秒→自動暫停（只前進）"><button id="specSeek" type="button" title="快轉到輸入的秒數並自動暫停">⏩ 跳到</button><button id="specPause" type="button">⏸ 暫停</button><button id="specExit" type="button">✕ 離開</button></div>
-<button id="rotBtn" class="hidden" type="button">↻ 旋轉城門</button>
+<div id="specBar" class="panel hidden"><b>👁 Spectating</b><span id="specClock"></span><span id="specInfo"></span><input id="specSeekIn" type="number" min="0" step="10" placeholder="sec" title="Enter a time to fast-forward to, then pause automatically (forward only)"><button id="specSeek" type="button" title="Fast-forward to that time and pause">⏩ Skip to</button><button id="specPause" type="button">⏸ Pause</button><button id="specExit" type="button">✕ Exit</button></div>
+<button id="rotBtn" class="hidden" type="button">↻ Rotate gate</button>
 <div id="coordHud" class="panel hidden"></div>
 <div id="dbgLog" class="panel hidden">
   <div id="dbgTools">
-    <button id="dbgMiniBtn" type="button" title="縮小/展開 log（縮小＝只留工具列·不擋畫面）">▾ 縮小</button>
-    <button id="dbgPauseBtn" type="button">⏸ 暫停</button>
-    <button id="dbgTraceBtn" type="button">🛰 軌跡</button>
-    <button id="dbgSaveBtn" type="button">💾 存檔</button>
-    <button id="dbgClearBtn" type="button">🗑 清空</button>
+    <button id="dbgMiniBtn" type="button" title="Collapse or expand the log">▾ Collapse</button>
+    <button id="dbgPauseBtn" type="button">⏸ Pause</button>
+    <button id="dbgTraceBtn" type="button">🛰 Trace</button>
+    <button id="dbgSaveBtn" type="button">💾 Export log</button>
+    <button id="dbgClearBtn" type="button">🗑 Clear</button>
   </div>
-  <div id="dbgLogBody">（無事件）</div>
+  <div id="dbgLogBody">(no events)</div>
 </div>
 <div id="dragGhost">🚩</div>
 <div id="overlay" class="hidden"><div id="overlayBox">
@@ -354,7 +354,7 @@
   <div id="techHead">
     <div id="techTitle"></div>
     <div id="techCivTabs"></div>
-    <span id="techClose" title="關閉">✕</span>
+    <span id="techClose" title="Close">✕</span>
   </div>
   <div id="techCivInfo"></div>
   <div id="techActions"></div>
@@ -759,27 +759,27 @@ const TECH=[
   
   {id:'S1',cat:'vis', tier:1,kind:'fn',    at:'tc',      star:false,             nm:'Outriders',  eff:'Scout cap +1, scout sight +1'},
   {id:'S2',cat:'vis', tier:2,kind:'fn',    at:'tower',   star:true, req:['S1'],  nm:'Beacons',      eff:'Building sight +2, remembered enemies linger twice as long, and firing exposes the enemy for longer'},
-  {id:'S3',cat:'vis', tier:2,kind:'fn',    at:'tower',   star:true, req:['S1'],  nm:'哨探',      eff:'我方可看穿一層森林、敵伏兵更難成立（林地線）'},
+  {id:'S3',cat:'vis', tier:2,kind:'fn',    at:'tower',   star:true, req:['S1'],  nm:'Scouting Parties',      eff:'You see one tile deep into forest, making enemy ambushes much harder to set'},
   
-  {id:'F1',cat:'fort',tier:1,kind:'val',   at:'tc',      star:false,             nm:'石造工程',  eff:'建築 HP +20%、維修速度 ×1.5'},
-  {id:'F2',cat:'fort',tier:2,kind:'fn',    at:'tower',   star:false,req:['F1'],  nm:'駐軍強化',  eff:'進駐容量 +25%、駐軍加箭權重↑、塔射程 +20'},
-  {id:'F3',cat:'fort',tier:3,kind:'fn',    at:'castle',  star:true, req:['F2'],  nm:'城防',      eff:'城牆/城門強化、抵消部分攻城加成（守城線）'},
+  {id:'F1',cat:'fort',tier:1,kind:'val',   at:'tc',      star:false,             nm:'Masonry',  eff:'Building HP +20%, repairs 1.5× faster'},
+  {id:'F2',cat:'fort',tier:2,kind:'fn',    at:'tower',   star:false,req:['F1'],  nm:'Murder Holes',  eff:'Garrison capacity +25%, garrisoned units add more arrows, tower range +20'},
+  {id:'F3',cat:'fort',tier:3,kind:'fn',    at:'castle',  star:true, req:['F2'],  nm:'Battlements',      eff:'Stronger walls and gates that cancel part of the siege bonus'},
   
-  {id:'U1',cat:'unit',tier:1,kind:'unlock',at:'stable',  star:false,             nm:'Cavalry',      eff:'解鎖 騎兵'},
-  {id:'U2',cat:'unit',tier:2,kind:'unlock',at:'smith',   star:false,req:['M1'],  nm:'投石車',    eff:'解鎖 投石車（攻城）'},
-  {id:'U3',cat:'unit',tier:2,kind:'unlock',at:'monastery',star:false,            nm:'醫護兵',    eff:'解鎖 醫護兵（治療）'},
-  {id:'UL',cat:'unit',tier:2,kind:'uniq',  at:'barracks',star:false,req:['M3'],  nm:'Longbowman',    eff:'英格蘭獨有：射程遠、齊射壓制'},
-  {id:'UH',cat:'unit',tier:2,kind:'uniq',  at:'barracks',star:false,req:['M2'],  nm:'Heavy Infantry',    eff:'神聖羅馬獨有：高防高 HP、頂住衝鋒'},
-  {id:'UM',cat:'unit',tier:2,kind:'uniq',  at:'stable',  star:false,req:['U1'],  nm:'Horse Archer',    eff:'蒙古獨有：移動射擊靠閃避'},
+  {id:'U1',cat:'unit',tier:1,kind:'unlock',at:'stable',  star:false,             nm:'Cavalry',      eff:'Unlocks cavalry'},
+  {id:'U2',cat:'unit',tier:2,kind:'unlock',at:'smith',   star:false,req:['M1'],  nm:'Catapults',    eff:'Unlocks the catapult (siege)'},
+  {id:'U3',cat:'unit',tier:2,kind:'unlock',at:'monastery',star:false,            nm:'Medics',    eff:'Unlocks the medic (healing)'},
+  {id:'UL',cat:'unit',tier:2,kind:'uniq',  at:'barracks',star:false,req:['M3'],  nm:'Longbowman',    eff:'England only: long range and suppressing volleys'},
+  {id:'UH',cat:'unit',tier:2,kind:'uniq',  at:'barracks',star:false,req:['M2'],  nm:'Heavy Infantry',    eff:'Holy Roman Empire only: heavy armour and HP, holds a charge'},
+  {id:'UM',cat:'unit',tier:2,kind:'uniq',  at:'stable',  star:false,req:['U1'],  nm:'Horse Archer',    eff:'Mongol only: shoots on the move and lives by evasion'},
   
-  {id:'N1',cat:'navy',tier:1,kind:'val',   at:'dock',    star:false,             nm:'漁業改良',  eff:'漁船採集量 +40%＋解鎖漁籠（漁船就地下籠·可再生海食）（水上經濟線）'},
-  {id:'N2',cat:'navy',tier:2,kind:'val',   at:'dock',    star:false,req:['N1'],  nm:'堅龍骨',    eff:'全船 HP +20%（通用耐久·不動相剋）'},
-  {id:'N3',cat:'navy',tier:2,kind:'val',   at:'dock',    star:false,req:['N1'],  nm:'強弩戰船',  eff:'戰船射程 +12%、箭速 +25%（固化戰船打帶跑定位）'},
-  {id:'N4',cat:'navy',tier:2,kind:'fn',    at:'dock',    star:false,req:['N1'],  nm:'希臘火',    eff:'投石船對船傷害 +50%（強化投石船剋火船·RPS headroom）'},
-  {id:'N5',cat:'navy',tier:3,kind:'val',   at:'dock',    star:false,req:['N2'],  nm:'樓船',      eff:'戰船 HP +25%、攻擊 +4（晚期戰力·重戰船）'},
-  {id:'NE',cat:'navy',tier:3,kind:'val',   at:'dock',    star:true, req:['N3'],  nm:'長弓戰船',  eff:'英格蘭獨有：戰船射程再 +18%（遠海壓制）'},
-  {id:'NH',cat:'navy',tier:3,kind:'val',   at:'dock',    star:true, req:['N2'],  nm:'鐵甲艦',    eff:'神聖羅馬獨有：全船 近/遠防 +2（耐揍）'},
-  {id:'NM',cat:'navy',tier:3,kind:'val',   at:'dock',    star:true, req:['N1'],  nm:'快火船',    eff:'蒙古獨有：火船移速 +18%（機動突擊）'},
+  {id:'N1',cat:'navy',tier:1,kind:'val',   at:'dock',    star:false,             nm:'Fisheries',  eff:'Fishing boats gather +40% and can drop fish traps for renewable sea food'},
+  {id:'N2',cat:'navy',tier:2,kind:'val',   at:'dock',    star:false,req:['N1'],  nm:'Sound Keels',    eff:'All ships +20% HP'},
+  {id:'N3',cat:'navy',tier:2,kind:'val',   at:'dock',    star:false,req:['N1'],  nm:'Ballista Galleys',  eff:'War galley range +12%, projectile speed +25%'},
+  {id:'N4',cat:'navy',tier:2,kind:'fn',    at:'dock',    star:false,req:['N1'],  nm:'Greek Fire',    eff:'Siege ships do +50% damage to ships'},
+  {id:'N5',cat:'navy',tier:3,kind:'val',   at:'dock',    star:false,req:['N2'],  nm:'Castle Ships',      eff:'War galley HP +25%, attack +4'},
+  {id:'NE',cat:'navy',tier:3,kind:'val',   at:'dock',    star:true, req:['N3'],  nm:'Longbow Galleys',  eff:'England only: war galley range +18% on top'},
+  {id:'NH',cat:'navy',tier:3,kind:'val',   at:'dock',    star:true, req:['N2'],  nm:'Ironclads',    eff:'Holy Roman Empire only: +2 melee and ranged defence on every ship'},
+  {id:'NM',cat:'navy',tier:3,kind:'val',   at:'dock',    star:true, req:['N1'],  nm:'Swift Fire Ships',    eff:'Mongol only: fire ships move 18% faster'},
 ];
 
 const UNIVERSAL=TECH.filter(x=>!x.star&&x.kind!=='uniq').map(x=>x.id); 
@@ -793,23 +793,23 @@ const UNIVERSAL=TECH.filter(x=>!x.star&&x.kind!=='uniq').map(x=>x.id);
    The "tell" column is derived automatically from the unique unit: sighting one
    is what lets the opponent infer the civilisation. */
 const CIVS=[
-  {id:'eng',aid:'england',nm:'英格蘭',ic:'🏹',proto:'弓 / 遠戰',flag:'#e0644f',stars:['S2','S3','M9','NE'],uniq:'UL',
-   str:'弓兵射程/齊射、自耕農均衡經濟、城堡尚可',weak:'正面近戰肉搏弱、機動偏慢',
-   sig:'長弓兵（克雷西/阿金庫爾）；偵察視野協同射程',
+  {id:'eng',aid:'england',nm:'England',ic:'🏹',proto:'Bow / ranged',flag:'#e0644f',stars:['S2','S3','M9','NE'],uniq:'UL',
+   str:'Archer range and volleys, a steady yeoman economy, decent castles',weak:'Weak in a straight melee, slow to reposition',
+   sig:'Longbowmen (Crécy, Agincourt); scouting sight that feeds their reach',
    ai:{open:'std',harass:false,retreatM:1.0,outM:0,wallAge:2,wallMode:'reactive',wtM:{def:1.1},pre:['M3'],star:['S2','S3','M9','NE'],
        ctrW:{cavalry:1.5,spear:0.7},ctrTech:['U1','M1']}}, 
-  {id:'hre',aid:'hre',nm:'神聖羅馬',ic:'🛡️',proto:'步 / 近戰',flag:'#4db6e8',stars:['M5','F3','NH'],uniq:'UH',
-   str:'攻防數值多一階且更便宜、城防工事、封建農業均衡',weak:'機動慢、偵察弱、怕放風箏',
-   sig:'重步兵＋工事；淬火攻城、城防抵消攻城加成',
+  {id:'hre',aid:'hre',nm:'Holy Roman',ic:'🛡️',proto:'Infantry / melee',flag:'#4db6e8',stars:['M5','F3','NH'],uniq:'UH',
+   str:'A cheaper extra step of attack and defence, strong fortifications, solid feudal farming',weak:'Slow, poor scouting, and easily kited',
+   sig:'Heavy infantry behind fortifications; tempered siege, battlements that blunt siege bonuses',
    ai:{open:'boom',harass:false,retreatM:1.25,outM:1,wallAge:1,wallMode:'proactive',wtM:{def:1.25,eco:1.05},pre:['M2','M1'],star:['M5','F3','NH'],
        ctrW:{archer:1.4,spear:0.8},ctrTech:['M3','U2']}}, 
-  {id:'mon',aid:'mongol',nm:'蒙古',ic:'🐎',proto:'騎 / 速度',flag:'#52c97a',stars:['M6','E3','M7','P1','M8','MR','NM'],uniq:'UM',
-   str:'全軍移速＋、部分免維持、機動經濟、偵察強',weak:'攻城/守城弱、建築脆',
-   sig:'弓騎兵＋蹄鐵衝鋒、軍需免維持（劫掠機動）',
+  {id:'mon',aid:'mongol',nm:'Mongols',ic:'🐎',proto:'Cavalry / speed',flag:'#52c97a',stars:['M6','E3','M7','P1','M8','MR','NM'],uniq:'UM',
+   str:'Faster army, part of it free of upkeep, mobile economy, excellent scouting',weak:'Poor at taking and holding fortifications, fragile buildings',
+   sig:'Horse archers and shod chargers, living off the land as they raid',
    ai:{open:'rush',harass:true,retreatM:0.85,outM:0,wallAge:2,wallMode:'never',wtM:{mil:1.15,def:0.7},pre:['U1','M7'],star:['M6','E3','P1','M8','NM'],
        ctrW:{spear:1.4,archer:0.8},ctrTech:['M3','F2']}}, 
 ];
-const STAR_POOL={E4:'商邦城邦',E5:'高地山民'}; 
+const STAR_POOL={E4:'Merchant Republics',E5:'Highland Clans'}; 
 function techById(id){return TECH.find(x=>x.id===id);}
 function civById(id){return typeof id==='string'?CIVS.find(c=>c.id===id):id;}
 function civEnabled(civ){civ=civById(civ); 
@@ -842,11 +842,11 @@ const S_=si=>SIDES[si||0];
 const stockOf=si=>S_(si).stock,techOf=si=>S_(si).tech,modOf=si=>S_(si).mod,civOf=si=>S_(si).civ,tagsOf=si=>S_(si).tags;
 let playerCiv=CIVS[0]; 
 const playerTech=SIDES[0].tech; 
-const AGE_NM=['','封建時代','城堡時代','騎士晚期'];
-const AGE_SHORT=['','封建','Castle','騎士晚']; 
+const AGE_NM=['','Feudal Age','Castle Age','Late Knights'];
+const AGE_SHORT=['','Feudal','Castle','Late Kn.']; 
 const AGES=[null,
-  {to:2,nm:'城堡時代',cost:{food:200,wood:100},time:30,need:3}, 
-  {to:3,nm:'騎士晚期',cost:{food:400,gold:200},time:45,need:3}, 
+  {to:2,nm:'Castle Age',cost:{food:200,wood:100},time:30,need:3}, 
+  {to:3,nm:'Late Knights',cost:{food:400,gold:200},time:45,need:3}, 
 ];
 const BTIER={barracks:1,market:1,tower:1,stable:1,smith:1,monastery:2,castle:2}; 
 function buildingAge(type){return BTIER[type]||1;} 
@@ -1330,7 +1330,7 @@ const ptrW={x:0,y:0};
 function isFishBoat(e){return !!(e&&e.type&&UT[e.type]&&UT[e.type].fish);} 
 function logEvt(kind,e,info){
   mlog.push({t:+t.toFixed(1),kind,side:e.side,id:e.id||0, 
-    type:e.type||(e.scout?'scout':(e.carry!==undefined?'村':'?')),
+    type:e.type||(e.scout?'scout':(e.carry!==undefined?'vil':'?')),
     x:Math.round(e.x),y:Math.round(e.y),tx:txOf(e.x),ty:tyOf(e.y),info:info||''});
   if(mlog.length>200)mlog.shift();
   if(dbgMode)renderDbgLog();
@@ -1345,32 +1345,32 @@ function dbgScan(){
   const vilDg=e=>{ if(e.carry===undefined)return ''; 
     let s=' '+(e.state||'?');
     if(e.job)s+='/'+e.job;
-    if(e.carry>0)s+='/背'+Math.round(e.carry)+(e.carryType||'');
-    if(e.buildSite)s+='/建'+e.buildSite.type;
-    else if(e.node)s+='/採'+e.node.type;
-    else if(e.lackRes)s+='/缺'+e.lackRes;
+    if(e.carry>0)s+='/carry '+Math.round(e.carry)+(e.carryType||'');
+    if(e.buildSite)s+='/build '+e.buildSite.type;
+    else if(e.node)s+='/gather '+e.node.type;
+    else if(e.lackRes)s+='/lacks '+e.lackRes;
     return s; };
   const resc=e=>{ 
     const ci=idx(txOf(e.x),tyOf(e.y));
     if(!domOK(ci,e.dom)){const p=nearestLegalXY(e,12);
-      if(p){e.x=p.x;e.y=p.y;e.path=[];e.dest=null;e.node=null;logEvt('搶救',e,'越域吸附回歸');}return true;}
+      if(p){e.x=p.x;e.y=p.y;e.path=[];e.dest=null;e.node=null;logEvt('rescued',e,'snapped back into its own movement domain');}return true;}
     
     if(blocked[ci]){
       if(t-(e._rescT||-9)<2)return true;
       e._rescT=t;
       const p=nearestLegalXY(e,8);
-      if(p){e.x=p.x;e.y=p.y;e.path=[];e.dest=null;e.nudge=null;e.movedT=t;logEvt('搶救',e,'建物內彈出');}
+      if(p){e.x=p.x;e.y=p.y;e.path=[];e.dest=null;e.nudge=null;e.movedT=t;logEvt('rescued',e,'pushed out of a building');}
       return true;
     }
     return false; };
   const stk=e=>{ if(resc(e))return; 
-    if(e.path&&e.path.length>0&&t-(e.movedT||0)>2&&!stationary(e.state)&&!working(e)){ if(!e._stk){e._stk=1;e._stkT=t;logEvt('卡兵',e,`徑${e.path.length}停${(t-(e.movedT||0)).toFixed(1)}s ${cellDg(e)}${vilDg(e)}`);}
+    if(e.path&&e.path.length>0&&t-(e.movedT||0)>2&&!stationary(e.state)&&!working(e)){ if(!e._stk){e._stk=1;e._stkT=t;logEvt('stuck',e,`path${e.path.length}halted${(t-(e.movedT||0)).toFixed(1)}s ${cellDg(e)}${vilDg(e)}`);}
       
       if(t-(e._stkT||t)>60&&t-(e._hardT||-9)>15){e._hardT=t;
         const p=nearestLegalXY(e,4);
         if(p){e.x=p.x;e.y=p.y;}
         e.path=[];e.dest=null;e.nudge=null;e.movedT=t;e._stk=0;
-        logEvt('搶救',e,'長期卡死強制吸附');
+        logEvt('rescued',e,'stuck for too long, force-snapped');
       }
       else if(t-(e.movedT||0)>3&&t-(e._unstkT||0)>2.5&&!e.deployTgt){unstick(e);e._unstkT=t;} } 
     else e._stk=0; };
@@ -1379,7 +1379,7 @@ function dbgScan(){
   for(const v of villagers)if(alive(v)&&!v.garrisoned){
     stk(v);
     if(v.job&&v.state==='idle'&&(!v.path||!v.path.length)){v._idleT=(v._idleT||0)+0.5;
-      if(v._idleT>3&&!v._idleLog){v._idleLog=1;logEvt('發呆',v,`job=${v.job} 缺=${v.lackRes||'-'} 有可採節點=${availRes(v.job,v.side)?'是':'否'}${v.carry>0?' 背'+Math.round(v.carry)+(v.carryType||''):''}`);}} 
+      if(v._idleT>3&&!v._idleLog){v._idleLog=1;logEvt('idling',v,`job=${v.job} lacks=${v.lackRes||'-'} reachable node=${availRes(v.job,v.side)?'yes':'no'}${v.carry>0?' carrying '+Math.round(v.carry)+(v.carryType||''):''}`);}} 
     else{v._idleT=0;v._idleLog=0;}
   }
   if(traceOn)traceTick();
@@ -1389,7 +1389,7 @@ function traceRow(e){
   let de='',drop='';
   if(vil){ const dp=dropoffAt(e.x,e.y); de=Math.round(Math.hypot(e.x-dp.x,e.y-dp.y)-dp.size*TILE/2); } 
   if(e.dest)drop=`→(${Math.round(e.dest.x)},${Math.round(e.dest.y)})`;
-  traceLog.push({t:+t.toFixed(1),side:e.side,id:e.id||0,type:e.type||(e.scout?'scout':(vil?'村':'?')),
+  traceLog.push({t:+t.toFixed(1),side:e.side,id:e.id||0,type:e.type||(e.scout?'scout':(vil?'vil':'?')),
     x:Math.round(e.x),y:Math.round(e.y),tx:txOf(e.x),ty:tyOf(e.y),st:e.state||'',
     carry:vil&&e.carry>0?`${Math.round(e.carry)}${e.carryType||''}`:'',drop,path:e.path?e.path.length:0,de,
     mvAgo:+(t-(e.movedT||0)).toFixed(1)});
@@ -1569,7 +1569,7 @@ function deploySettler(u){
     const i=units.indexOf(u);if(i>=0)units.splice(i,1);
     if(si===0)alertMsg('white',fmt(STR.msg_built,{b:BT.outpost.nm}));return b;
   }
-  if(si===0)alertMsg('yellow',STR.msg_cantBuild||'此處無法部署');return null;
+  if(si===0)alertMsg('yellow',STR.msg_cantBuild||'Cannot deploy here');return null;
 }
 function dockLaunch(b){ 
   const sz=BT[b.type].size||2;
@@ -1729,7 +1729,7 @@ function findPath(sx,sy,dx,dy,side,avoidDanger,dom,pen){
 function uFP(u,dx,dy){ 
   const p=findPath(u.x,u.y,dx,dy,u.side,false,u.dom);
   
-  if(fpCross&&t-(u.xrT||-9)>5){u.xrT=t;logEvt('跨區',u,'目標在別的通行區域'+(p.length?'·改走最近可達點':'·已在最近點'));}
+  if(fpCross&&t-(u.xrT||-9)>5){u.xrT=t;logEvt('cross-region',u,'the target sits in another walkable region'+(p.length?' · heading to the nearest reachable point instead':' · already at the nearest point'));}
   return p;}
 function nearestWaterXY(x,y){ 
   const cx=txOf(x),cy=tyOf(y);
@@ -3360,7 +3360,7 @@ function issueBoard(ti,T,si){si=si||0;
   if(n){cx/=n;cy/=n;const wp=nearestWaterXY(cx,cy); 
     if(wp&&Math.hypot(T.x-wp.x,T.y-wp.y)>TILE*2){T.path=uFP(T,wp.x,wp.y);T.unloadPt=null;}} 
   if(si===0){markers.push({x:T.x,y:T.y,t0:t,col:TAGCOL[ti]});sndClick();renderTagbar();
-  if(!n)alertMsg('yellow',STR.msg_boardNone||'無可登艦的陸軍或已滿載');}
+  if(!n)alertMsg('yellow',STR.msg_boardNone||'No land units in range, or the transport is full');}
 }
 function issueGarrison(ti,b,si){si=si||0;
   const g=tagsOf(si)[ti];g.seq++;g.pt={x:b.x,y:b.y};
@@ -4872,18 +4872,18 @@ const aiBrained=si=>(si||0)===1?aiEco:!!aiOn[si||0];
    cmpFoe = whether to compare strengths before attacking rather than only counting
    waves; tgtSel = how a target is chosen. */
 const AI_DIFF={
-  noob:  {nm:'新手',per:2.5,jit:0.40,ord:8,  villF:0.55,outF:0.34,expand:'passive', comp:'single', routes:'first',retreat:0,   scout:'none',   pressMin:7, turtle:240,milCap:0.7,milCheat:1,    supBuf:0.5, adapt:0,   harass:false,squads:'none',  tactics:false,cmpFoe:false,tgtSel:'none',tgtSq:'home',mfMuster:false,outEn:false,outBar:false,cityUp:false,milShare:0.2, waveSz:0.55,regrow:'cap', gather:1,  tech:0,towers:1,wall:false,castle:0,civRead:false,civSee:false,lateStar:false,bind:0.34,
+  noob:  {nm:'Beginner',per:2.5,jit:0.40,ord:8,  villF:0.55,outF:0.34,expand:'passive', comp:'single', routes:'first',retreat:0,   scout:'none',   pressMin:7, turtle:240,milCap:0.7,milCheat:1,    supBuf:0.5, adapt:0,   harass:false,squads:'none',  tactics:false,cmpFoe:false,tgtSel:'none',tgtSq:'home',mfMuster:false,outEn:false,outBar:false,cityUp:false,milShare:0.2, waveSz:0.55,regrow:'cap', gather:1,  tech:0,towers:1,wall:false,castle:0,civRead:false,civSee:false,lateStar:false,bind:0.34,
           wt:{eco:1.2,mil:0.7,def:0.5,tech:0.7,sea:0.8,intel:0.3,exp:0.4},mkt:'rescue', mktRate:1.0, mktBal:2.2},
-  normal:{nm:'普通',per:1.5,jit:0,   ord:5,  villF:0.80,outF:0.34,expand:'reactive',comp:'fixed',  routes:'first',retreat:0,   scout:'none',   pressMin:10,turtle:120,milCap:1,   milCheat:1,   supBuf:0.6, adapt:0,   harass:false,squads:'none',  tactics:false,cmpFoe:false,tgtSel:'near',tgtSq:'near',mfMuster:false,outEn:true, outBar:false,cityUp:true, milShare:0.35,waveSz:0.8, regrow:'cap', gather:1,  tech:0,towers:1,wall:false,castle:0,civRead:false,civSee:false,lateStar:false,bind:0.7,
+  normal:{nm:'Normal',per:1.5,jit:0,   ord:5,  villF:0.80,outF:0.34,expand:'reactive',comp:'fixed',  routes:'first',retreat:0,   scout:'none',   pressMin:10,turtle:120,milCap:1,   milCheat:1,   supBuf:0.6, adapt:0,   harass:false,squads:'none',  tactics:false,cmpFoe:false,tgtSel:'near',tgtSq:'near',mfMuster:false,outEn:true, outBar:false,cityUp:true, milShare:0.35,waveSz:0.8, regrow:'cap', gather:1,  tech:0,towers:1,wall:false,castle:0,civRead:false,civSee:false,lateStar:false,bind:0.7,
           wt:{eco:1.1,mil:0.9,def:0.8,tech:0.9,sea:0.9,intel:0.5,exp:0.8},mkt:'rescue', mktRate:1.1, mktBal:2.2},
-  hard:  {nm:'困難',per:1,  jit:0,   ord:2.5,villF:0.95,outF:0.67,expand:'proactive',comp:'counter',routes:'draw', retreat:1.55,scout:'passive',pressMin:8, turtle:100,milCap:1,   milCheat:1,   supBuf:0.7, adapt:1.15,harass:false,squads:'patrol',tactics:true, cmpFoe:true,tgtSel:'vary',tgtSq:'weak',mfMuster:false,outEn:true, outBar:true, cityUp:true, milShare:0.5, waveSz:1,   regrow:'vill',gather:1,  tech:0,towers:2,wall:true, castle:1,civRead:true, civSee:false,lateStar:false,bind:1,
+  hard:  {nm:'Hard',per:1,  jit:0,   ord:2.5,villF:0.95,outF:0.67,expand:'proactive',comp:'counter',routes:'draw', retreat:1.55,scout:'passive',pressMin:8, turtle:100,milCap:1,   milCheat:1,   supBuf:0.7, adapt:1.15,harass:false,squads:'patrol',tactics:true, cmpFoe:true,tgtSel:'vary',tgtSq:'weak',mfMuster:false,outEn:true, outBar:true, cityUp:true, milShare:0.5, waveSz:1,   regrow:'vill',gather:1,  tech:0,towers:2,wall:true, castle:1,civRead:true, civSee:false,lateStar:false,bind:1,
           wt:{eco:1,mil:1,def:1,tech:1,sea:1,intel:0.8,exp:1},              mkt:'balance',mktRate:1.25,mktBal:1.5},
-  boss:  {nm:'魔王',per:1,  jit:0,   ord:2.5,villF:1.0, outF:1,   comp:'counter',routes:'draw', retreat:1.55,scout:'active', pressMin:8, turtle:90, milCap:1.15,milCheat:1,   supBuf:0.8, expand:'contest',adapt:1.25,harass:true, squads:'dynamic',tactics:true, cmpFoe:true,tgtSel:'weak',tgtSq:'weak',mfMuster:true,outEn:true, outBar:true, cityUp:true, milShare:0.5, waveSz:1,   regrow:'vill',gather:1.2,tech:0,towers:3,wall:true, castle:2,civRead:true, civSee:false,lateStar:true, bind:1,
+  boss:  {nm:'Boss',per:1,  jit:0,   ord:2.5,villF:1.0, outF:1,   comp:'counter',routes:'draw', retreat:1.55,scout:'active', pressMin:8, turtle:90, milCap:1.15,milCheat:1,   supBuf:0.8, expand:'contest',adapt:1.25,harass:true, squads:'dynamic',tactics:true, cmpFoe:true,tgtSel:'weak',tgtSq:'weak',mfMuster:true,outEn:true, outBar:true, cityUp:true, milShare:0.5, waveSz:1,   regrow:'vill',gather:1.2,tech:0,towers:3,wall:true, castle:2,civRead:true, civSee:false,lateStar:true, bind:1,
           wt:{eco:1,mil:1.05,def:1,tech:1,sea:1,intel:1.1,exp:1.1},         mkt:'balance',mktRate:1.4, mktBal:1.4},
   
-  shura: {nm:'修羅',per:1,  jit:0,   ord:2.5,villF:1.0, outF:1,   comp:'counter',routes:'draw', retreat:1.40,scout:'active', pressMin:8, turtle:90, milCap:1,   milCheat:1.3, supBuf:0.85,expand:'contest',adapt:1.25,harass:true, squads:'dynamic',tactics:true, cmpFoe:true,tgtSel:'weak',tgtSq:'weak',mfMuster:true,outEn:true, outBar:true, cityUp:true, milShare:0.5, waveSz:1,   regrow:'vill',gather:1.2,tech:1,towers:3,wall:true, castle:2,civRead:true, civSee:false,lateStar:true, bind:1,
+  shura: {nm:'Warlord',per:1,  jit:0,   ord:2.5,villF:1.0, outF:1,   comp:'counter',routes:'draw', retreat:1.40,scout:'active', pressMin:8, turtle:90, milCap:1,   milCheat:1.3, supBuf:0.85,expand:'contest',adapt:1.25,harass:true, squads:'dynamic',tactics:true, cmpFoe:true,tgtSel:'weak',tgtSq:'weak',mfMuster:true,outEn:true, outBar:true, cityUp:true, milShare:0.5, waveSz:1,   regrow:'vill',gather:1.2,tech:1,towers:3,wall:true, castle:2,civRead:true, civSee:false,lateStar:true, bind:1,
           wt:{eco:1,mil:1.05,def:1,tech:1,sea:1,intel:1.1,exp:1.1},         mkt:'balance',mktRate:1.4, mktBal:1.4},
-  god:   {nm:'天神',per:1,  jit:0,   ord:2.5,villF:1.0, outF:1,   comp:'counter',routes:'draw', retreat:1.40,scout:'active', pressMin:8, turtle:90, milCap:1,   milCheat:1.5, supBuf:0.9, expand:'contest',adapt:1.25,harass:true, squads:'dynamic',tactics:true, cmpFoe:true,tgtSel:'weak',tgtSq:'weak',mfMuster:true,outEn:true, outBar:true, cityUp:true, milShare:0.5, waveSz:1,   regrow:'vill',gather:1.5,tech:2,towers:3,wall:true, castle:2,civRead:true, civSee:true, lateStar:true, bind:1,
+  god:   {nm:'Titan',per:1,  jit:0,   ord:2.5,villF:1.0, outF:1,   comp:'counter',routes:'draw', retreat:1.40,scout:'active', pressMin:8, turtle:90, milCap:1,   milCheat:1.5, supBuf:0.9, expand:'contest',adapt:1.25,harass:true, squads:'dynamic',tactics:true, cmpFoe:true,tgtSel:'weak',tgtSq:'weak',mfMuster:true,outEn:true, outBar:true, cityUp:true, milShare:0.5, waveSz:1,   regrow:'vill',gather:1.5,tech:2,towers:3,wall:true, castle:2,civRead:true, civSee:true, lateStar:true, bind:1,
           wt:{eco:1,mil:1.05,def:1,tech:1,sea:1,intel:1.1,exp:1.1},         mkt:'balance',mktRate:1.4, mktBal:1.4},
 };
 const AI_DIFF_ORDER=['noob','normal','hard','boss','shura','god'];
@@ -5817,7 +5817,7 @@ function aiMilTickLegacy(si){
     if(a.mlMode!==dec.mode){a.mlMode=dec.mode;a.mlModeT=t;}          
     a.mlInv=dec.inv;
     if(t-a.mlModeT>AI_ML_STUCK&&aiMlBehind(si)){                     
-      if(!a.mlFall){a.mlFall=true;if(window.__AI_ML_LOG)console.warn('[R11 ML fallback] side '+si+' 模式 '+dec.mode+' 卡死>'+AI_ML_STUCK+'s 且落後→回規則腦');}
+      if(!a.mlFall){a.mlFall=true;if(window.__AI_ML_LOG)console.warn('[R11 ML fallback] side '+si+' mode '+dec.mode+' stalled >'+AI_ML_STUCK+'s and behind -> falling back to the rule-based brain');}
     }else a.mlFall=false;
     mlUse=!a.mlFall;
     if(mlUse){
@@ -6446,7 +6446,7 @@ function aiMilTickSquads(si){
     const dec=aiMlDecide(si,aiPolicyFor(si),null);
     if(a.mlMode!==dec.mode){a.mlMode=dec.mode;a.mlModeT=t;}
     a.mlInv=dec.inv;
-    if(t-a.mlModeT>AI_ML_STUCK&&aiMlBehind(si)){if(!a.mlFall){a.mlFall=true;if(window.__AI_ML_LOG)console.warn('[R11 ML fallback] side '+si+' 模式 '+dec.mode+' 卡死>'+AI_ML_STUCK+'s 且落後→回規則腦');}}else a.mlFall=false;
+    if(t-a.mlModeT>AI_ML_STUCK&&aiMlBehind(si)){if(!a.mlFall){a.mlFall=true;if(window.__AI_ML_LOG)console.warn('[R11 ML fallback] side '+si+' mode '+dec.mode+' stalled >'+AI_ML_STUCK+'s and behind -> falling back to the rule-based brain');}}else a.mlFall=false;
     if(!a.mlFall){a.mlRally=(dec.mode==='rally');
       if(dec.mode==='commit'||dec.mode==='harass'||dec.mode==='rally')mlLaunch=true;
       else if(dec.mode==='defend'||dec.mode==='retreat')mlLaunch=false;
@@ -6880,7 +6880,7 @@ function issueTagOrder(ti,wx,wy,si){si=si||0;
     u.garTgt=null;
     const p=ft.get(u)||{x:wx,y:wy};
     u.path=uFP(u,p.x,p.y);
-    if(!u.path.length&&Math.hypot(p.x-u.x,p.y-u.y)>TILE*2)logEvt('無路',u,'令點不可達'); 
+    if(!u.path.length&&Math.hypot(p.x-u.x,p.y-u.y)>TILE*2)logEvt('no path',u,'that spot cannot be reached'); 
     u.wp=null;u.tgt=null;u.anchor={x:wx,y:wy};
     
     u.relocate=!g.focus&&!UT[u.type].medic&&!(engModel===2&&g.task==='attack'); 
@@ -6919,7 +6919,7 @@ function trainScout(b){
 function trainSettler(b){ 
   const si=b.side||0;
   if(techOf(si).age<2){if(si===0)alertMsg('yellow',STR.msg_settlerAge);return;} 
-  if(units.filter(u=>u.type==='settler'&&u.side===si).length+cqCount('settler',si)>=SETTLER_CAP){if(si===0)alertMsg('yellow',fmt(STR.ui_settlerCap||'開拓隊上限 {n}',{n:SETTLER_CAP}));return;}
+  if(units.filter(u=>u.type==='settler'&&u.side===si).length+cqCount('settler',si)>=SETTLER_CAP){if(si===0)alertMsg('yellow',fmt(STR.ui_settlerCap||'Settler cap {n}',{n:SETTLER_CAP}));return;}
   if(!canAfford(UT.settler.cost,si)){if(si===0)alertMsg('yellow',STR.msg_noRes);return;}
   if(b.cq.length>=5)return;
   pay(UT.settler.cost,si);b.cq.push({u:'settler'});if(si===0)sndClick();
@@ -7432,7 +7432,7 @@ function render(){
     if(T.setup){const f=setupFrac(u); 
       if(f<1){ctx.strokeStyle='#ffbf47';ctx.lineWidth=2;ctx.beginPath();ctx.arc(u.x,u.y,rr+3,-Math.PI/2,-Math.PI/2+f*Math.PI*2);ctx.stroke();}}
     ctx.fillStyle='#fff';ctx.font='9px sans-serif';ctx.fillText(T.ch,u.x,u.y);
-    if(T.medic&&u.healFx&&t-u.healFx<.5){ctx.fillStyle='#8ef09a';ctx.font='10px sans-serif';ctx.fillText('＋',u.x+9,u.y-9);}
+    if(T.medic&&u.healFx&&t-u.healFx<.5){ctx.fillStyle='#8ef09a';ctx.font='10px sans-serif';ctx.fillText('+',u.x+9,u.y-9);}
     if(T.hold&&u.cargo&&u.cargo.length){ctx.fillStyle='#ffe9b3';ctx.font='9px sans-serif';ctx.fillText('▾'+transUsed(u)+'/'+transHold(u),u.x,u.y-15);} 
     if(u.hp<u.maxHp)bar(u.x,u.y-13,14,u.hp/u.maxHp,u.side===0?'#7fc25c':'#e06050');
     if(u.stunT>0){ctx.fillStyle='#ffe9b3';ctx.font='9px sans-serif';ctx.fillText('✶',u.x,u.y-16);}
@@ -7694,7 +7694,7 @@ function cvUp(e){
   if(placing){tryPlace(wx,wy);return;}
   closePanels();
   const pu=pickUnitAt(wx,wy); 
-  if(pu){if(dbgMode){dbgPick=pu;logEvt('標記',pu,`${pu.state||''}${pu.job?' '+pu.job:''}${pu.carry>=10?' 卸貨':''}`);} 
+  if(pu){if(dbgMode){dbgPick=pu;logEvt('marked',pu,`${pu.state||''}${pu.job?' '+pu.job:''}${pu.carry>=10?' unloading':''}`);} 
     openUnitPanel(pu);return;}
   const b=buildings.find(o=>o.side===0&&Math.abs(o.x-wx)<(o.w||o.size)*TILE/2&&Math.abs(o.y-wy)<(o.h||o.size)*TILE/2); 
   if(b&&b.done){
@@ -7760,7 +7760,7 @@ function updateHUD(){
   q('#st_t').textContent=`${mmn}:${ss}`;
   if(spectate){const mc=si=>units.filter(u2=>u2.side===si&&u2.hp>0&&!u2.gar).length,
     vc=si=>villagers.filter(v2=>(v2.side||0)===si&&alive(v2)).length;
-    q('#specInfo').textContent=`🔵 兵${mc(0)}·村${vc(0)}·${A(0).state}　🔴 兵${mc(1)}·村${vc(1)}·${A(1).state}`;
+    q('#specInfo').textContent=`🔵 army ${mc(0)} · villagers ${vc(0)}·${A(0).state}　🔴 army ${mc(1)} · villagers ${vc(1)}·${A(1).state}`;
     q('#specClock').textContent=`🕐 ${Math.floor(t)}s${seekT!=null?' ⏩'+Math.floor(seekT)+'s':''}`;}
   q('#upkLine').textContent=fmt(STR.ui_upkeep,{n:Math.round(curUpkeep*60)}); 
   if(!q('#ecoPanel').classList.contains('hidden')) 
@@ -8000,7 +8000,7 @@ function openProdPanel(b){
     if(el.classList.contains('hidden')){
       let txt=`<div>${STR.ui_statsHead}</div>`;
       for(const k of myUnits){const T=UT[k];
-        txt+=`<div>${T.ch} ${T.nm}｜${T.dmg}｜${T.aM||0}｜${T.aP||0}｜${T.vol}｜${Math.round((T.up||0)*60)}/分</div>`;}
+        txt+=`<div>${T.ch} ${T.nm} | ${T.dmg} | ${T.aM||0} | ${T.aP||0} | ${T.vol} | ${Math.round((T.up||0)*60)}/min</div>`;}
       el.innerHTML=txt;el.classList.remove('hidden');
     }else el.classList.add('hidden');
     sndClick();
@@ -8049,7 +8049,7 @@ function openCCPanel(b){
      use the global count. */
   const vq=b.cq.filter(it=>it.u==='villager').length,sq=b.cq.filter(it=>it.u==='scout').length,setq=b.cq.filter(it=>it.u==='settler').length,full=T.prod==='full';
   let html=`<span class="closeX" onclick="closePanels()">✕</span>
-    <div class="pTitle">${T.nm}${T.life?`（${STR.ui_lives}）`:''}</div>${bldStat(b)}
+    <div class="pTitle">${T.nm}${T.life?` (${STR.ui_lives})`:''}</div>${bldStat(b)}
     <div class="rowBtns">
       <button class="sBtn" id="tcV">${STR.ui_trainV}${vq?'×'+vq:''}</button>`;
   if(full)html+=`<button class="sBtn" id="tcS">${fmt(STR.ui_trainScout,{q:sq?'×'+sq:''})}</button>`;
@@ -8057,7 +8057,7 @@ function openCCPanel(b){
   html+=`</div>
     <div class="pTitle" style="margin-bottom:2px">${STR.ui_queueHint}</div>
     <div class="rowBtns" id="tcqRow"></div>`;
-  if(full)html+=`<div class="pTitle">${fmt(STR.ui_scoutCap,{n:SCOUT_CAP+techMod.scoutCap})}　${fmt(STR.ui_settlerCap,{n:SETTLER_CAP})}</div>`;
+  if(full)html+=`<div class="pTitle">${fmt(STR.ui_scoutCap,{n:SCOUT_CAP+techMod.scoutCap})} ${fmt(STR.ui_settlerCap,{n:SETTLER_CAP})}</div>`;
   html+=`<div class="pTitle">${fmt(STR.ui_garrison,{a:volUsed(b),b:garCap(b)})}</div>
     <div class="pTitle">${garComp(b)}</div>
     <div class="rowBtns"><button class="sBtn" id="tcEj" ${volUsed(b)?'':'disabled'}>${STR.ui_eject}</button></div>`;
@@ -8089,7 +8089,7 @@ function openMonasteryPanel(b){
   html+=`</div><div class="rowBtns">`;
   {const c=Object.entries(UT.medic.cost).map(([r,n])=>RES.find(x=>x.k===r).ic+n).join('');
    const lk=!unitUnlocked('medic'); 
-   html+=`<button class="uBtn" data-u="medic" ${lk?'disabled title="需研發解鎖"':''}>${UT.medic.ch} ${UT.medic.nm}<small>${lk?'🔒'+STR.ui_techLocked:c}</small></button>`;}
+   html+=`<button class="uBtn" data-u="medic" ${lk?'disabled title="unlocked by research"':''}>${UT.medic.ch} ${UT.medic.nm}<small>${lk?'🔒'+STR.ui_techLocked:c}</small></button>`;}
   html+=`</div><div class="pTitle" style="margin-bottom:2px">${STR.ui_queueHint}</div>
     <div class="rowBtns" id="bqRow"></div>
     <div class="pTitle">${fmt(STR.ui_monAura,{r:T.healR,h:T.heal})}</div>`;
@@ -8216,7 +8216,7 @@ function vJobLabel(v){
 }
 function bldStat(b){ 
   const T=BT[b.type];
-  const ex=T.rng?`　射程 ${T.rng}　傷 ${T.dmg}`:'';
+  const ex=T.rng?`　range ${T.rng}　damage ${T.dmg}`:'';
   return `<div class="pSub">${fmt(STR.ui_bStat,{h:Math.ceil(b.hp),mx:b.maxHp,ex})}</div>`;
 }
 const foeVisible=e=>spectate||tileVis(e.x,e.y)||e.revealT>t; 
@@ -8252,22 +8252,22 @@ function openFoeUnitPanel(u){
     else html+=`<div class="pSub">${fmt(STR.ui_uStatA,{a:T.dmg,t:proj?STR.ui_atkRanged:STR.ui_atkMelee,m:T.aM||0,p:T.aP||0})}</div>`;
     html+=`<div class="pSub">${fmt(STR.ui_uStatB,{r:rTok,s:Math.round(T.sp),v:T.vis})}</div>`;
     const uq=UNIQ_CIV[u.type];
-    if(uq)html+=`<div class="pSub" style="color:#ffd479">${fmt(STR.ui_foeCiv,{c:starOwner(uq).join('／'),u:UT[u.type].nm})}</div>`;
+    if(uq)html+=`<div class="pSub" style="color:#ffd479">${fmt(STR.ui_foeCiv,{c:starOwner(uq).join('/'),u:UT[u.type].nm})}</div>`;
   }
   html+=`<div class="pSub" style="opacity:.65">${STR.ui_foeReadonly}</div>`;
   p.innerHTML=html;p.classList.remove('hidden');
 }
-const specSideChip=si=>`<div class="pSub" style="color:${si===0?'#8db8ff':'#ff9a86'}">${si===0?'🔵 藍方（AI）':'🔴 紅方（AI）'}</div>`; 
+const specSideChip=si=>`<div class="pSub" style="color:${si===0?'#8db8ff':'#ff9a86'}">${si===0?'🔵 Blue (AI)':'🔴 Red (AI)'}</div>`; 
 /* Spectator mode is an omniscient view and discloses everything: group names,
    missions, scout modes. The normal enemy panel shows none of it, because that is
    what scouting is for. */
-const SPEC_G_NM=['主力','守備隊','巡邏隊','艦隊','攻城組','增援隊','資源守衛','佯攻騷擾隊'];
-const SPEC_TASK_NM={guard:'駐守',patrol:'Patrol',attack:'進攻',hold:'堅守'};
-const SPEC_SCOUT_NM={explore:'探索',sentry:'哨戒',observe:'觀察'};
+const SPEC_G_NM=['Main force','Garrison force','Patrol','Fleet','Siege group','Reinforcements','Resource guard','Raiding party'];
+const SPEC_TASK_NM={guard:'holding',patrol:'Patrol',attack:'attacking',hold:'standing firm'};
+const SPEC_SCOUT_NM={explore:'exploring',sentry:'on watch',observe:'observing'};
 function specUnitStatus(u){ 
   const isVil=u.carry!==undefined&&!isFishBoat(u),isScout=!!(u.scout||u.mode);
   if(isVil){const rr=u.carry>0&&u.carryType?RES.find(x=>x.k===u.carryType):null;
-    return fmt(STR.ui_specTask,{s:vJobLabel(u)+(rr?`　${rr.nm} ${Math.floor(u.carry)}`:'')});}
+    return fmt(STR.ui_specTask,{s:vJobLabel(u)+(rr?` ${rr.nm} ${Math.floor(u.carry)}`:'')});}
   if(isScout)return fmt(STR.ui_specTask,{s:SPEC_SCOUT_NM[u.mode]||u.mode});
   if(UT[u.type]&&(u.type==='fishing'||u.type==='transport'))return fmt(STR.ui_specTask,{s:UT[u.type].nm});
   const gs=tagsOf(u.side||0),gi=u.grp?gs.indexOf(u.grp):-1;
@@ -8310,7 +8310,7 @@ function openUnitPanel(u){
   if(u.carry!==undefined&&!isFishBoat(u)){ 
     const g=(2*techMod.gather).toFixed(1),e=techMod.gather>1?STR.ui_uGE1:'';
     const rr=u.carry>0&&u.carryType?RES.find(x=>x.k===u.carryType):null;
-    const carry=rr?`${rr.nm}：${Math.floor(u.carry)}/10`:STR.ui_carryNone;
+    const carry=rr?`${rr.nm}: ${Math.floor(u.carry)}/10`:STR.ui_carryNone;
     html+=`<div class="pTitle">${fmt(STR.ui_uTitle,{ic:VIL.ch,nm:STR.u_villager,h:Math.ceil(u.hp),mx:u.maxHp})}</div>
       <div class="pSub">${fmt(STR.ui_uVil,{s:vJobLabel(u),c:carry})}</div>
       <div class="pSub">${fmt(STR.ui_uVilG,{g,e})}</div>`;
@@ -8323,8 +8323,8 @@ function openUnitPanel(u){
     const atkB=proj?techMod.rangedAtk:techMod.meleeAtk;
     const sp=Math.round(T.sp*(T.mount?techMod.cavSpeed:1))+(T.mount&&techMod.cavSpeed>1?'↑':'');
     const upk=(T.up||0)*techMod.upkeep,ud=techMod.upkeep<1?'↓':'';
-    const bnm=k=>UT[k]?UT[k].nm:(k==='building'?'建築':k==='raid'?'農田/萌芽林/漁籠':k); 
-    const bns=T.bonus?Object.entries(T.bonus).map(([k,v])=>`${bnm(k)}×${k==='raid'?(v*techMod.raidDmg)+(techMod.raidDmg>1?'↑':''):v}`).join('、'):STR.ui_carryNone;
+    const bnm=k=>UT[k]?UT[k].nm:(k==='building'?'buildings':k==='raid'?'farms, coppices and fish traps':k); 
+    const bns=T.bonus?Object.entries(T.bonus).map(([k,v])=>`${bnm(k)}×${k==='raid'?(v*techMod.raidDmg)+(techMod.raidDmg>1?'↑':''):v}`).join(', '):STR.ui_carryNone;
     /* Range token: ranged units show the projectile range, medics their healing
        distance, and melee units just say "melee" -- their engagement distance is not a
        projectile range and printing a number invites the wrong comparison. */
@@ -8366,7 +8366,7 @@ function openScoutPanel(s){
   const p=q('#scPanel');
   let html=`<span class="closeX" onclick="closePanels()">✕</span>
     <div class="pTitle" style="color:#7de8dc">${fmt(STR.ui_scoutTitle,{n:s.id,h:Math.ceil(s.hp)+'/'+s.maxHp})}</div>
-    <div class="pSub">${fmt(STR.ui_uStatB,{r:'—',s:SCT.sp,v:SCT.vis})}　${STR.ui_uScNoUpk}</div>
+    <div class="pSub">${fmt(STR.ui_uStatB,{r:'—',s:SCT.sp,v:SCT.vis})} ${STR.ui_uScNoUpk}</div>
     <div class="pTitle">${STR.ui_modeHint}</div><div class="rowBtns">`;
   for(const k in MODES)html+=`<button class="sBtn ${s.mode===k?'on':''}" data-m="${k}">${MODES[k].ic}${MODES[k].nm}</button>`;
   html+=`</div>`;
@@ -8396,7 +8396,7 @@ function closeTechTree(){q('#techOverlay').classList.add('hidden');techPaused=fa
 const costStr=c=>Object.keys(c).map(k=>RES.find(r=>r.k===k).ic+c[k]).join(' ');
 function renderTechTree(){
   const mine=techCiv===playerCiv;
-  q('#techTitle').textContent=STR.ui_techTitle+`　·　${STR.ui_techAge}：${AGE_NM[playerTech.age]}`; 
+  q('#techTitle').textContent=STR.ui_techTitle+`　·　${STR.ui_techAge}: ${AGE_NM[playerTech.age]}`; 
   q('#techHint').textContent=STR.ui_techHint;
   const tabs=q('#techCivTabs');tabs.innerHTML='';
   for(const c of CIVS){const b=document.createElement('button');
@@ -8409,9 +8409,9 @@ function renderTechTree(){
   ci.innerHTML=`<b style="color:${techCiv.flag}">${techCiv.ic} ${techCiv.nm}</b>`+
     (techCiv===playerCiv?`<span class="techMine">${STR.ui_techMyCiv}</span>`:'')+
     `<span class="proto">${techCiv.proto}</span>`+
-    `<span class="sw">${STR.ui_techStr}</span>：${techCiv.str}　`+
-    `<span class="sw">${STR.ui_techWeak}</span>：${techCiv.weak}　`+
-    `<span class="sw">${STR.ui_techSig}</span>：${techCiv.sig}`;
+    `<span class="sw">${STR.ui_techStr}</span>: ${techCiv.str} `+
+    `<span class="sw">${STR.ui_techWeak}</span>: ${techCiv.weak} `+
+    `<span class="sw">${STR.ui_techSig}</span>: ${techCiv.sig}`;
   /* Action row: your own civilisation offers age advancement and the research queue;
      viewing another offers switching to it. */
   const act=q('#techActions');act.innerHTML='';
@@ -8428,8 +8428,8 @@ function renderTechTree(){
     act.appendChild(ageBox);
     const tr=document.createElement('div');tr.className='techTrack';let s=STR.ui_techTrack;
     if(playerTech.track){s+=`<b>${techById(playerTech.track.id).nm}</b> ${Math.round(playerTech.track.t/playerTech.track.dur*100)}%`;
-      if(playerTech.queue.length)s+=' ｜ '+playerTech.queue.map(id=>techById(id).nm).join('、');}
-    else s+='（閒置）';
+      if(playerTech.queue.length)s+=' | '+playerTech.queue.map(id=>techById(id).nm).join(', ');}
+    else s+=' (idle)';
     tr.innerHTML=s;act.appendChild(tr);
   }else{
     const compat=civCompatible(techCiv); 
@@ -8452,12 +8452,12 @@ function renderTechTree(){
       const card=document.createElement('div');
       card.className='techCard'+(off?' off':'')+(tch.star?' star':'')+(tch.kind==='uniq'?' uniq':'')+(st==='done'?' rdone':'')+(st==='active'?' ractive':'');
       const star=tch.star?'<span class="starMark">★</span>':'';
-      const reqTxt=tch.req?fmt(STR.ui_techReq,{r:tch.req.map(r=>techById(r)?techById(r).nm:r).join('＋')})+'　':'';
+      const reqTxt=tch.req?fmt(STR.ui_techReq,{r:tch.req.map(r=>techById(r)?techById(r).nm:r).join('+')})+' ':'';
       const defer=enabled&&!WIRED.has(tch.id)?`　<span class="techDefer">${STR.ui_techDeferred}</span>`:'';
       let leads='';
       if(!enabled&&(tch.star||tch.kind==='uniq')){
         const owners=starOwner(tch.id);
-        const to=owners.length?owners.join('／'):(STAR_POOL[tch.id]?`${STAR_POOL[tch.id]}（${STR.ui_techPool}）`:STR.ui_techPool);
+        const to=owners.length?owners.join('/'):(STAR_POOL[tch.id]?`${STAR_POOL[tch.id]} (${STR.ui_techPool})`:STR.ui_techPool);
         leads=`<div class="techLeads">${fmt(STR.ui_techLeads,{c:to})}</div>`;
       }
       let actLine='';
@@ -8467,7 +8467,7 @@ function renderTechTree(){
         else if(st==='queued')actLine=`<button class="techCancelBtn" data-cancel="${tch.id}">${STR.ui_techQueued}　✕${STR.ui_techCancel}</button>`;
         else if(st==='avail')actLine=`<button class="techDoBtn" data-id="${tch.id}">${STR.ui_techResearch}<small>${costStr(techCost(tch))}</small></button>`;
         else if(st==='age')actLine=`<div class="techStat lock">${fmt(STR.ui_techNeedAge,{n:AGE_NM[tch.tier]})}</div>`;
-        else if(st==='prereq')actLine=`<div class="techStat lock">${fmt(STR.ui_techNeedReq,{r:tch.req.map(r=>techById(r).nm).join('＋')})}</div>`;
+        else if(st==='prereq')actLine=`<div class="techStat lock">${fmt(STR.ui_techNeedReq,{r:tch.req.map(r=>techById(r).nm).join('+')})}</div>`;
         else if(st==='atbld')actLine=`<div class="techStat lock">${fmt(STR.ui_techNeedBld,{b:TECH_AT[tch.at]||tch.at})}</div>`; 
         else actLine=`<div class="techStat lock">🔒 ${STR.ui_techLocked}</div>`;
       }else if(!enabled)actLine=`<div class="techStat lock">🔒 ${STR.ui_techLocked}</div>`;
@@ -8498,7 +8498,7 @@ for(const r of RES){
   row.innerHTML=`<span class="nm">${r.ic}${r.nm}</span>
     <button class="rbtn" data-k="${r.k}" data-d="-1">−</button>
     <span class="shareVal" id="sh_${r.k}"></span>
-    <button class="rbtn" data-k="${r.k}" data-d="1">＋</button>
+    <button class="rbtn" data-k="${r.k}" data-d="1">+</button>
     <span class="pct" id="pc_${r.k}"></span>`;
   rowsEl.appendChild(row);
 }
@@ -8592,13 +8592,13 @@ function pingAlert(x,y,col,txt){
 }
 /* == Development tooling UI: coordinate readout, movement log, and the debug
    toggle == */
-const TNAME=['平地','高地','坡道','森林','沼澤'];
+const TNAME=['plain','highland','ramp','forest','marsh'];
 function updateCoordHud(){
   if(!dbgMode)return;
   const x=ptrW.x,y=ptrW.y,tx=txOf(x),ty=tyOf(y),i=idx(tx,ty);
-  const fl=[];if(blocked[i])fl.push('阻擋');if(nearCliff(x,y))fl.push('崖帶');
-  if(typeof gateMask!=='undefined'&&gateMask[i])fl.push('Gate'+(gateMask[i]-1===0?'(我)':'(敵)'));
-  q('#coordHud').innerHTML=`世界 (${Math.round(x)}, ${Math.round(y)})　格 (${tx},${ty})<br>${TNAME[terr[i]]||'?'}　${fl.join(' ')||'—'}`;
+  const fl=[];if(blocked[i])fl.push('blocked');if(nearCliff(x,y))fl.push('cliff');
+  if(typeof gateMask!=='undefined'&&gateMask[i])fl.push('Gate'+(gateMask[i]-1===0?'(you)':'(enemy)'));
+  q('#coordHud').innerHTML=`world (${Math.round(x)}, ${Math.round(y)})　tile (${tx},${ty})<br>${TNAME[terr[i]]||'?'} ${fl.join(' ')||'—'}`;
 }
 const KCOL={stuck:'#ff7a7a',idling:'#ffb35c',marked:'#7fe0ff',test:'#9fdc9f'}; 
 function renderDbgLog(){
@@ -8606,22 +8606,22 @@ function renderDbgLog(){
   el.innerHTML=mlog.slice(-24).reverse().map(m=>{
     const mm=String(Math.floor(m.t/60)).padStart(2,'0'),ss=String(Math.floor(m.t%60)).padStart(2,'0');
     const col=KCOL[m.kind]||'#dfe6d8';
-    return `<div class="le" style="color:${col}">${mm}:${ss} ${m.kind} ${m.side===0?'我':'敵'}${m.type}${m.id?'#'+m.id:''} (${m.x},${m.y}) 格(${m.tx},${m.ty}) ${m.info}</div>`;
-  }).join('')||'（無事件）';
+    return `<div class="le" style="color:${col}">${mm}:${ss} ${m.kind} ${m.side===0?'you':'enemy'}${m.type}${m.id?'#'+m.id:''} (${m.x},${m.y}) tile(${m.tx},${m.ty}) ${m.info}</div>`;
+  }).join('')||'(no events)';
 }
 function setPaused(on){ 
   paused=on===undefined?!paused:!!on;
-  const b=q('#dbgPauseBtn'); if(b){b.classList.toggle('on',paused);b.textContent=paused?'▶ 續跑':'⏸ 暫停';}
-  const sb=q('#specPause'); if(sb)sb.textContent=paused?'▶ 續跑':'⏸ 暫停'; 
+  const b=q('#dbgPauseBtn'); if(b){b.classList.toggle('on',paused);b.textContent=paused?'▶ Resume':'⏸ Pause';}
+  const sb=q('#specPause'); if(sb)sb.textContent=paused?'▶ Resume':'⏸ Pause'; 
   return paused;
 }
 function saveLog(){ 
   const fmtT=v=>String(Math.floor(v/60)).padStart(2,'0')+':'+(v%60).toFixed(1).padStart(4,'0');
-  const lines=mlog.map(m=>`${fmtT(m.t)}\t${m.kind}\t${m.side===0?'我':'敵'}${m.type}${m.id?'#'+m.id:''}\t世界(${m.x},${m.y})\t格(${m.tx},${m.ty})\t${m.info}`);
-  let txt=`# RTS slice4 移動 log　匯出 t=${t.toFixed(1)}s　事件 ${mlog.length} 筆\n`+lines.join('\n')+'\n';
+  const lines=mlog.map(m=>`${fmtT(m.t)}\t${m.kind}\t${m.side===0?'you':'enemy'}${m.type}${m.id?'#'+m.id:''}\\tworld(${m.x},${m.y})\\ttile(${m.tx},${m.ty})\t${m.info}`);
+  let txt=`# RTS movement log　exported at t=${t.toFixed(1)}s　events ${mlog.length}\\n`+lines.join('\n')+'\n';
   if(traceLog.length){ 
-    const tl=traceLog.map(m=>`${fmtT(m.t)}\t${m.side===0?'我':'敵'}${m.type}#${m.id}\t世界(${m.x},${m.y})\t格(${m.tx},${m.ty})\t${m.st}\t${m.carry}\t${m.drop}\t徑${m.path}\tde${m.de}\t停${m.mvAgo}s`);
-    txt+=`\n# 軌跡 traceLog（每0.5s取樣）共 ${traceLog.length} 筆　欄位：時間 單位#id 世界座標 格 狀態 背負 目的 路徑長 卸貨邊緣距de 停滯秒（同 id＝同一隻，可追個別單位）\n`+tl.join('\n')+'\n';
+    const tl=traceLog.map(m=>`${fmtT(m.t)}\t${m.side===0?'you':'enemy'}${m.type}#${m.id}\\tworld(${m.x},${m.y})\\ttile(${m.tx},${m.ty})\t${m.st}\t${m.carry}\t${m.drop}\\tpath${m.path}\tde${m.de}\\thalted${m.mvAgo}s`);
+    txt+=`\\n# traceLog (sampled every 0.5s), ${traceLog.length} rows.　Columns: time, unit #id, world position, tile, state, carrying, destination, path length, distance to drop-off edge, seconds stalled. Same id = same unit, so individuals can be traced.\\n`+tl.join('\n')+'\n';
   }
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([txt],{type:'text/plain'}));
@@ -8630,7 +8630,7 @@ function saveLog(){
 }
 function setTrace(on){ 
   traceOn=on===undefined?!traceOn:!!on;
-  const b=q('#dbgTraceBtn'); if(b){b.classList.toggle('on',traceOn);b.textContent=traceOn?'🛰 記錄中':'🛰 軌跡';}
+  const b=q('#dbgTraceBtn'); if(b){b.classList.toggle('on',traceOn);b.textContent=traceOn?'🛰 recording':'🛰 Trace';}
   if(traceOn&&!dbgMode)setDebug(true); 
   return traceOn;
 }
@@ -8648,7 +8648,7 @@ q('#dbgPauseBtn').onclick=()=>{setPaused();sndClick();};
 q('#dbgTraceBtn').onclick=()=>{setTrace();sndClick();};
 q('#dbgSaveBtn').onclick=()=>{saveLog();sndClick();};
 q('#dbgClearBtn').onclick=()=>{mlog.length=0;traceLog.length=0;dbgPick=null;renderDbgLog();sndClick();};
-q('#dbgMiniBtn').onclick=()=>{const mini=q('#dbgLog').classList.toggle('mini');q('#dbgMiniBtn').textContent=mini?'▸ 展開':'▾ 縮小';sndClick();}; 
+q('#dbgMiniBtn').onclick=()=>{const mini=q('#dbgLog').classList.toggle('mini');q('#dbgMiniBtn').textContent=mini?'▸ Expand':'▾ Collapse';sndClick();}; 
 /* One tools button in the bottom-left corner, away from the information panels on
    the right so it never covers them. */
 function toggleTools(open){const m=q('#toolsMenu');const show=open===undefined?m.classList.contains('hidden'):open;
@@ -8660,14 +8660,14 @@ q('#rotBtn').onclick=rotateGate;
    Pick a matchup, the two armies charge, and rerunning the same one repeatedly is
    how the probabilistic parts (hit chance and the rest) get measured. == */
 const ARENA_PRESETS=[
-  ['槍vs槍',{spear:6},{spear:6}],
-  ['弓vs槍',{archer:6},{spear:8}],
-  ['騎vs弓',{cavalry:5},{archer:7}],
-  ['弓騎vs弓',{horsearcher:6},{archer:7}],
-  ['混戰',{spear:4,archer:3,cavalry:2},{spear:4,archer:3,cavalry:2}],
-  ['🌊戰船vs火船',{galley:6},{fireship:6}], 
-  ['🌊火船vs投石船',{fireship:6},{siegeship:4}],
-  ['🌊海戰混',{galley:4,fireship:3,siegeship:2},{galley:4,fireship:3,siegeship:2}],
+  ['Spear vs Spear',{spear:6},{spear:6}],
+  ['Archer vs Spear',{archer:6},{spear:8}],
+  ['Cavalry vs Archer',{cavalry:5},{archer:7}],
+  ['Horse Archer vs Archer',{horsearcher:6},{archer:7}],
+  ['Combined arms',{spear:4,archer:3,cavalry:2},{spear:4,archer:3,cavalry:2}],
+  ['🌊 Galley vs Fire Ship',{galley:6},{fireship:6}], 
+  ['🌊 Fire Ship vs Siege Ship',{fireship:6},{siegeship:4}],
+  ['🌊 Mixed fleets',{galley:4,fireship:3,siegeship:2},{galley:4,fireship:3,siegeship:2}],
 ];
 const ARENA_UNITS=['spear','archer','cavalry','catapult','horsearcher','longbow','heavyinf','galley','fireship','siegeship']; 
 let arenaLast=null, arenaL={spear:6}, arenaR={spear:6};
@@ -8733,13 +8733,13 @@ function arenaSetup(comp0,comp1){
     arenaSetup(arenaL,arenaR);q('#arenaPanel').classList.add('hidden');q('#arenaBtn').classList.remove('on');sndClick();});
   buildEl.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;setCount(b.dataset.s,b.dataset.t,+b.dataset.d);sndClick();});
   q('#arenaGo').onclick=()=>{const L=clean(arenaL),R=clean(arenaR); 
-    if(!Object.keys(L).length||!Object.keys(R).length){alertMsg('yellow','左右各需至少一個兵');return;}
+    if(!Object.keys(L).length||!Object.keys(R).length){alertMsg('yellow','Each side needs at least one unit');return;}
     arenaSetup(L,R);q('#arenaPanel').classList.add('hidden');q('#arenaBtn').classList.remove('on');sndClick();};
   q('#arenaBtn').onclick=()=>{const h=q('#arenaPanel').classList.toggle('hidden');q('#arenaBtn').classList.toggle('on',!h);toggleTools(false);sndClick();};
   
   {const ids=Object.keys(MAP_DEFS),cur=ids.indexOf(MAP_ID),nx=MAP_DEFS[ids[(cur+1)%ids.length]],nxId=ids[(cur+1)%ids.length];
    q('#mapBtn').textContent=`${nx.ic} ${nx.nm}`;q('#mapBtn').classList.toggle('on',MAP_ID!=='land');
-   q('#mapBtn').title=`現在：${MAP_DEF.ic} ${MAP_DEF.nm}——${MAP_DEF.desc}\n點一下換到：${nx.ic} ${nx.nm}（重載）`;
+   q('#mapBtn').title=`Now: ${MAP_DEF.ic} ${MAP_DEF.nm}——${MAP_DEF.desc}\\nTap to switch to: ${nx.ic} ${nx.nm} (reloads)`;
    q('#mapBtn').onclick=()=>{const u=new URL(location.href);
      if(nxId==='land')u.searchParams.delete('map');else u.searchParams.set('map',nxId);location.href=u.href;};}
   q('#arenaReplay').onclick=()=>{if(arenaLast)arenaSetup(arenaLast[0],arenaLast[1]);sndClick();};
@@ -8749,15 +8749,15 @@ function arenaSetup(comp0,comp1){
      The list is generated from the difficulty table rather than written by hand:
      hand-written, it silently omitted every handicap added afterwards. */
   function diffDisclose(k){const d=AI_DIFF[k],cheats=[];
-    if(d.gather>1)    cheats.push(`採集 ×${d.gather}`);
-    if(d.tech>0)      cheats.push(`M 線攻防 +${d.tech} 階`);
-    if(d.milCheat>1)  cheats.push(`軍規模 ×${d.milCheat}`);
-    if(d.civSee)      cheats.push('目擊即知對手已承諾的文明'); 
-    const scale=d.milCap!==1?`　主力目標規模 ×${d.milCap}（它想打多大的波＝非作弊：仍全額付費、受糧食供養封頂）。`:'';
+    if(d.gather>1)    cheats.push(`gathering ×${d.gather}`);
+    if(d.tech>0)      cheats.push(`attack/defence line +${d.tech} step(s)`);
+    if(d.milCheat>1)  cheats.push(`army size ×${d.milCheat}`);
+    if(d.civSee)      cheats.push('recognises a committed civilisation on sight'); 
+    const scale=d.milCap!==1?`　target army size ×${d.milCap} — how big a push it aims for. Not cheating: it still pays full price and is capped by what its food can support.`:'';
     return (cheats.length
-      ?`作弊級（明示）：${cheats.join('·')}——仍全額付費、吃軍糧、不偷看視野（兵力位置/組成一律偵察）。`
-      :'公平級：與你同規則、同視野（兵力位置/組成一律偵察）、同價格。')
-      +scale+(AI_DIFF_ORDER.indexOf(k)>=3?'會派斥候偵察＋多線騷擾。':'');}
+      ?`Handicapped in its favour (stated openly): ${cheats.join('·')} — it still pays full price, eats upkeep, and never peeks through the fog: army positions and composition have to be scouted.`
+      :'Fair: same rules, same fog of war (positions and composition have to be scouted), same prices as you.')
+      +scale+(AI_DIFF_ORDER.indexOf(k)>=3?'Sends scouts and harasses on several fronts.':'');}
   window.__diffDisclose=diffDisclose;
   /* Whether the opponent's civilisation can be chosen: yes below hard, random above.
      Scouting is a designed decision -- identifying a committed civilisation on sight
@@ -8770,13 +8770,13 @@ function arenaSetup(comp0,comp1){
   
   {const qp0=new URLSearchParams(location.search);
    let selDiff=(qp0.get('diff')&&AI_DIFF[qp0.get('diff')])?qp0.get('diff'):'hard',selCiv=qp0.get('aiciv')||'';
-   const civs=[['','🎲 隨機'],...CIVS.filter(c=>c.ai).map(c=>[c.aid||c.id,c.nm])]; 
+   const civs=[['','🎲 Random'],...CIVS.filter(c=>c.ai).map(c=>[c.aid||c.id,c.nm])]; 
    const paint=()=>{
      const pick=aiCivPickable(selDiff);if(!pick)selCiv=''; 
      q('#diffCur').textContent=AI_DIFF[selDiff].nm+(selCiv?'·'+civs.find(c=>c[0]===selCiv)[1]:'');
      q('#diffRow').innerHTML=AI_DIFF_ORDER.map(k=>`<button class="sBtn${k===selDiff?' on':''}" data-d="${k}">${AI_DIFF[k].nm}</button>`).join('');
      q('#civRow').innerHTML=pick?civs.map(([k,nm])=>`<button class="sBtn${k===selCiv?' on':''}" data-c="${k}">${nm}</button>`).join('')
-       :'<span class="diffHint">🎲 隨機（魔王以上不給選＝對手文明要自己派斥候看出來）</span>';
+       :'<span class="diffHint">🎲 Random — not selectable at Boss and above: scout to find out who you are facing</span>';
      q('#diffHint').textContent=diffDisclose(selDiff);
    };
    q('#diffRow').onclick=e2=>{const k=e2.target&&e2.target.dataset&&e2.target.dataset.d;if(k){selDiff=k;paint();sndClick();}};
@@ -8795,15 +8795,15 @@ function arenaSetup(comp0,comp1){
    if(location.search!==''){break HOME_SCR;}
    const scr=q('#homeScr');scr.classList.remove('hidden');setPaused(true);
    let mMap=MAP_ID,mDiff='hard',mAi='';
-   const aiCivs=[['','🎲 隨機'],...CIVS.filter(c=>c.ai).map(c=>[c.aid||c.id,`${c.ic} ${c.nm}`])];
+   const aiCivs=[['','🎲 Random'],...CIVS.filter(c=>c.ai).map(c=>[c.aid||c.id,`${c.ic} ${c.nm}`])];
    const row=(sel,list,attr)=>list.map(([k,nm])=>`<button class="sBtn${k===sel?' on':''}" data-${attr}="${k}">${nm}</button>`).join('');
    const hPaint=()=>{
      q('#homeMapRow').innerHTML=row(mMap,Object.keys(MAP_DEFS).map(k=>[k,`${MAP_DEFS[k].ic} ${MAP_DEFS[k].nm}`]),'hm');
      q('#homeDiffRow').innerHTML=row(mDiff,AI_DIFF_ORDER.map(k=>[k,AI_DIFF[k].nm]),'hd');
      const canPick=aiCivPickable(mDiff);if(!canPick)mAi='';
      q('#homeAiCivRow').innerHTML=canPick?row(mAi,aiCivs,'ha')
-       :'<span class="homeSub" style="margin:0">🎲 隨機——魔王以上不給選，對手文明要自己派斥候看出來。</span>';
-     q('#homeHint').textContent=MAP_DEFS[mMap].desc+'　'+diffDisclose(mDiff);
+       :'<span class="homeSub" style="margin:0">🎲 Random — not selectable at Boss and above. Scout to find out who you are facing.</span>';
+     q('#homeHint').textContent=MAP_DEFS[mMap].desc+' '+diffDisclose(mDiff);
    };
    const pick=(attr,set)=>e2=>{const v=e2.target&&e2.target.dataset&&e2.target.dataset[attr];
      if(v!==undefined){set(v);hPaint();sndClick();}};
@@ -8845,8 +8845,8 @@ function pickAt(x,y){
 function dbgMark(x,y){
   const {e,d,kind}=pickAt(x,y);
   if(e&&d<44){dbgPick=e; 
-    logEvt('標記',e,`${kind}距${Math.round(d)} 徑${e.path?e.path.length:0}${e.state?' '+e.state:''}${e.job?' '+e.job:''}${e.dest?' 有dest':''}`);}
-  else logEvt('標記',{side:0,x,y},'空地');
+    logEvt('marked',e,`${kind}dist ${Math.round(d)} path ${e.path?e.path.length:0}${e.state?' '+e.state:''}${e.job?' '+e.job:''}${e.dest?' has dest':''}`);}
+  else logEvt('marked',{side:0,x,y},'open ground');
 }
 /* ============ 15. Audio ============ */
 let AC=null;
@@ -8902,14 +8902,14 @@ function spectateInit(dA,dB){
   for(const id of ['tagbar','leftTabs','scoutbar','buildPanel','ecoPanel'])q('#'+id).classList.add('hidden');
   q('#specBar').classList.remove('hidden');
   updateFog();computeDanger();
-  console.log(`[觀戰] 🔵 ${A(0).diff} vs 🔴 ${A(1).diff}·點任何單位/建築＝唯讀狀態·藍/紅淺霧＝該方看不到的區域`);
+  console.log(`[Spectate] 🔵 ${A(0).diff} vs 🔴 ${A(1).diff} · tap any unit or building for a read-only view · the blue/red haze is what that side cannot see`);
 }
 {const qp=new URLSearchParams(location.search);
  const sv=qp.get('seed');if(sv&&+sv){seed=+sv|0;if(qp.get('spectate')==='1')TICK=1/30;} 
  const dv=qp.get('diff');if(dv&&AI_DIFF[dv]&&qp.get('spectate')!=='1')aiSetDiff(1,dv); 
  const cv=qp.get('aiciv');if(cv&&AI_CIVROW[cv])aiSetPers(1,cv); 
  const pcv=qp.get('civ');if(pcv&&civById(pcv))setPlayerCiv(pcv); 
- if(dv&&AI_DIFF[dv]&&AI_DIFF[dv].gather>1)console.log(`[AI] 作弊級 ${AI_DIFF[dv].nm}：採集 ×${AI_DIFF[dv].gather}、M 線攻防 +${AI_DIFF[dv].tech} 階（明示）`);
+ if(dv&&AI_DIFF[dv]&&AI_DIFF[dv].gather>1)console.log(`[AI] handicap ${AI_DIFF[dv].nm}: gathering ×${AI_DIFF[dv].gather}, attack/defence line +${AI_DIFF[dv].tech} step(s), stated openly`);
  if(qp.get('spectate')==='1')spectateInit(qp.get('diff0')||dv||'hard',dv||'hard');}
 requestAnimationFrame(frame);
 /* ============ 16. Save snapshots (state, not replay) ============
@@ -9019,8 +9019,8 @@ function snapDec(v,reg){
   if(Array.isArray(v))return v.map(x=>snapDec(x,reg));
   if(v.$u!==undefined)return undefined;
   if(v.$f!==undefined)return v.$f>0?Infinity:v.$f<0?-Infinity:NaN;
-  if(v.$r!==undefined){const o=reg.get(v.$r);if(o===undefined)throw new Error('存檔參照遺失：'+v.$r);return o;}
-  if(v.$c!==undefined){const o=SNAP_SRr.get(v.$c);if(o===undefined)throw new Error('存檔對不上本版資料表：'+v.$c);return o;}
+  if(v.$r!==undefined){const o=reg.get(v.$r);if(o===undefined)throw new Error('Save file references something missing: '+v.$r);return o;}
+  if(v.$c!==undefined){const o=SNAP_SRr.get(v.$c);if(o===undefined)throw new Error('Save file does not match this build\'s data tables: '+v.$c);return o;}
   if(v.$set!==undefined)return new Set(v.$set.map(x=>snapDec(x,reg)));
   if(v.$map!==undefined)return new Map(v.$map.map(([k,x])=>[snapDec(k,reg),snapDec(x,reg)]));
   if(v.$ta!==undefined){const C=SNAP_TA[v.$ta];const a=new C(v.n);snapUnpackInto(v.d,a);return a;}
@@ -9054,8 +9054,8 @@ function snapMake(){
 }
 function snapApply(sn){ 
   snapStatics();
-  if(!sn||sn.v!==SNAP_V)throw new Error('存檔格式版本不符（檔 v'+(sn&&sn.v)+'·本版 v'+SNAP_V+'）');
-  if(sn.map!==MAP_ID)throw new Error('地圖不符（檔＝'+sn.map+'·目前＝'+MAP_ID+'）');
+  if(!sn||sn.v!==SNAP_V)throw new Error('Save format mismatch (file v'+(sn&&sn.v)+' · this build v'+SNAP_V+')');
+  if(sn.map!==MAP_ID)throw new Error('Wrong map (file = '+sn.map+' · current = '+MAP_ID+')');
   const reg=new Map(),arrs=SNAP_ARRS(),conts=snapConts(),shell={};
   for(const k in sn.ents){shell[k]=sn.ents[k].map(()=>({}));
     for(let i=0;i<shell[k].length;i++)reg.set(k+'|'+i,shell[k][i]);}
@@ -9102,16 +9102,16 @@ function snapList(){
 }
 function snapMeta(sn,bytes){return {ts:sn.ts,map:sn.map,sec:sn.sec,civ:sn.civ,diff:sn.diff,nU:sn.nU,nV:sn.nV,nB:sn.nB,bytes};}
 function snapNoSaveWhy(){ 
-  if(snapHome)return '首頁只能讀檔／匯入（還沒開局＝沒有東西好存）';
-  if(spectate||arenaMode)return '觀戰／擂台模式不能存檔（可以讀）';
+  if(snapHome)return 'The title screen can only load or import — there is no game in progress to save';
+  if(spectate||arenaMode)return 'Spectator and arena modes cannot be saved (loading works)';
   return '';
 }
 function snapSave(i){
   const why=snapNoSaveWhy();if(why)throw new Error(why);
-  const ls=snapLS();if(!ls)throw new Error('這個瀏覽器不給存（無痕模式？）＝請改用「⤓ 匯出檔案」');
+  const ls=snapLS();if(!ls)throw new Error('This browser refuses to store data (private mode?) — use "⤓ Export file" instead');
   const sn=snapMake(),js=JSON.stringify(sn);
   try{ls.setItem(snapKey(i),js);ls.setItem(snapMKey(i),JSON.stringify(snapMeta(sn,js.length)));}
-  catch(e){throw new Error('存檔空間不足（'+Math.round(js.length/1024)+'KB）＝先刪掉一個舊存檔，或改用「⤓ 匯出檔案」');}
+  catch(e){throw new Error('Not enough storage ('+Math.round(js.length/1024)+' KB) — delete an old save, or use "⤓ Export file"');}
   return {slot:i,bytes:js.length,warn:sn.warn};
 }
 function snapRead(i){const ls=snapLS();if(!ls)return null;
@@ -9123,16 +9123,16 @@ function snapDel(i){const ls=snapLS();if(!ls)return;ls.removeItem(snapKey(i));ls
 function snapEnter(sn){
   if(sn&&sn.map!==MAP_ID){
     try{sessionStorage.setItem(SNAP_PEND,JSON.stringify(sn));}
-    catch(e){try{snapLS().setItem(SNAP_PEND,JSON.stringify(sn));}catch(e2){throw new Error('換地圖讀檔失敗＝空間不足');}}
+    catch(e){try{snapLS().setItem(SNAP_PEND,JSON.stringify(sn));}catch(e2){throw new Error('Could not load: not enough storage to switch maps');}}
     const u=new URL(location.href);u.search='';u.searchParams.set('home','0');
     if(sn.map!=='land')u.searchParams.set('map',sn.map);
     location.href=u.href;return 'reload';
   }
   snapApply(sn);return 'ok';
 }
-function snapLoad(i){const sn=snapRead(i);if(!sn)throw new Error('這個欄位沒有存檔');return snapEnter(sn);}
+function snapLoad(i){const sn=snapRead(i);if(!sn)throw new Error('That slot is empty');return snapEnter(sn);}
 function snapExport(i){
-  const sn=i===undefined?snapMake():snapRead(i);if(!sn)throw new Error('這個欄位沒有存檔');
+  const sn=i===undefined?snapMake():snapRead(i);if(!sn)throw new Error('That slot is empty');
   const d=new Date(sn.ts),p=n=>String(n).padStart(2,'0');
   const nm=`rts-${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}-${sn.map}-${Math.round(sn.sec)}s.rtssave`;
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(sn)],{type:'application/json'}));
@@ -9144,19 +9144,19 @@ function snapExport(i){
 {let p=null;
  try{p=sessionStorage.getItem(SNAP_PEND);if(p)sessionStorage.removeItem(SNAP_PEND);}catch(e){}
  if(!p)try{const ls=snapLS();if(ls){p=ls.getItem(SNAP_PEND);if(p)ls.removeItem(SNAP_PEND);}}catch(e){}
- if(p)try{snapApply(JSON.parse(p));console.log('[存檔] 已接續');}catch(e){console.warn('[存檔] 讀檔失敗',e);}}
+ if(p)try{snapApply(JSON.parse(p));console.log('[Save] resumed');}catch(e){console.warn('[Save] load failed',e);}}
 /* Save/load panel, reachable from the tools menu and from the title screen. */
 function snapPanelPaint(){
   const box=q('#saveSlots');if(!box)return;
   const list=snapList(),ro=!!snapNoSaveWhy(); 
   box.innerHTML=list.map((m,i)=>{
     const civ=m&&(civById(m.civ)||{}),d=m&&AI_DIFF[m.diff];
-    const info=m?`${civ.ic||''}${civ.nm||m.civ} vs ${d?d.nm:m.diff}　${Math.floor(m.sec/60)}:${String(m.sec%60).padStart(2,'0')}　村${m.nV}兵${m.nU}`
+    const info=m?`${civ.ic||''}${civ.nm||m.civ} vs ${d?d.nm:m.diff} ${Math.floor(m.sec/60)}:${String(m.sec%60).padStart(2,'0')}　villagers ${m.nV}army ${m.nU}`
                :'(empty)';
     const when=m?new Date(m.ts).toLocaleString():'';
-    return `<div class="svRow"><div class="svInfo"><b>存檔 ${i+1}</b>　${info}<div class="svWhen">${when}${m&&m.map!=='land'?'　'+(MAP_DEFS[m.map]?MAP_DEFS[m.map].nm:m.map):''}</div></div>`
-      +`<div class="svBtns">${ro?'':`<button type="button" data-sv="save" data-i="${i}">💾 存</button>`}`
-      +(m?`<button type="button" data-sv="load" data-i="${i}">▶ 讀</button><button type="button" data-sv="exp" data-i="${i}">⤓</button><button type="button" data-sv="del" data-i="${i}">🗑</button>`:'')
+    return `<div class="svRow"><div class="svInfo"><b>Slot ${i+1}</b>　${info}<div class="svWhen">${when}${m&&m.map!=='land'?' '+(MAP_DEFS[m.map]?MAP_DEFS[m.map].nm:m.map):''}</div></div>`
+      +`<div class="svBtns">${ro?'':`<button type="button" data-sv="save" data-i="${i}">💾 Save</button>`}`
+      +(m?`<button type="button" data-sv="load" data-i="${i}">▶ Load</button><button type="button" data-sv="exp" data-i="${i}">⤓</button><button type="button" data-sv="del" data-i="${i}">🗑</button>`:'')
       +`</div></div>`;
   }).join('');
 }
@@ -9165,7 +9165,7 @@ function openSavePanel(home){
   const p=q('#savePanel');if(!p)return;
   snapHome=!!home;                       
   p.classList.remove('hidden');snapPanelPaint();
-  snapMsg(snapHome?'選一個存檔按「▶ 讀」接續，或「⤒ 匯入檔案」；沒有存檔就先開新局。':snapNoSaveWhy());
+  snapMsg(snapHome?'Pick a slot and press "▶ Load" to continue, or "⤒ Import file". With no saves, start a new game first.':snapNoSaveWhy());
 }
 (function snapWire(){
   const p=q('#savePanel');if(!p)return;
@@ -9173,10 +9173,10 @@ function openSavePanel(home){
     const b=e.target.closest&&e.target.closest('button[data-sv]');if(!b)return;
     const i=+b.dataset.i;sndClick();
     try{
-      if(b.dataset.sv==='save'){const r=snapSave(i);snapPanelPaint();snapMsg(`已存到欄位 ${i+1}（${Math.round(r.bytes/1024)}KB）`);}
+      if(b.dataset.sv==='save'){const r=snapSave(i);snapPanelPaint();snapMsg(`Saved to slot ${i+1} (${Math.round(r.bytes/1024)} KB)`);}
       else if(b.dataset.sv==='load'){if(snapEnter(snapRead(i))==='ok'){p.classList.add('hidden');snapMsg('');}}
-      else if(b.dataset.sv==='exp'){snapMsg('已匯出：'+snapExport(i));}
-      else if(b.dataset.sv==='del'){snapDel(i);snapPanelPaint();snapMsg('已刪除欄位 '+(i+1));}
+      else if(b.dataset.sv==='exp'){snapMsg('Exported: '+snapExport(i));}
+      else if(b.dataset.sv==='del'){snapDel(i);snapPanelPaint();snapMsg('Cleared slot '+(i+1));}
     }catch(err){snapMsg(String(err.message||err),true);}
   };
   q('#saveImport').onclick=()=>{sndClick();q('#saveFile').click();};
@@ -9184,7 +9184,7 @@ function openSavePanel(home){
     const f=e.target.files&&e.target.files[0];if(!f)return;
     const r=new FileReader();
     r.onload=()=>{try{if(snapEnter(JSON.parse(r.result))==='ok'){p.classList.add('hidden');}}
-      catch(err){snapMsg('匯入失敗：'+(err.message||err),true);}};
+      catch(err){snapMsg('Import failed: '+(err.message||err),true);}};
     r.readAsText(f);e.target.value='';
   };
   q('#saveClose').onclick=()=>{p.classList.add('hidden');sndClick();};
