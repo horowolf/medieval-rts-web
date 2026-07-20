@@ -1,0 +1,6 @@
+[
+  {
+    "from": "const KCOL={卡兵:'#ff7a7a',發呆:'#ffb35c',標記:'#7fe0ff',test:'#9fdc9f'};",
+    "to": "const KCOL={stuck:'#ff7a7a',idling:'#ffb35c',marked:'#7fe0ff',test:'#9fdc9f'};"
+  }
+]

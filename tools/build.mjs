@@ -3,8 +3,9 @@
 //
 //   node tools/build.mjs [path-to-source-index.html]
 //
-// For now one artifact comes out of the development source:
-//   zh/index.html   the game, with its original Chinese UI
+// Two artifacts come out of one source file:
+//   index.html      English UI, developer tools hidden behind ?dev=1
+//   zh/index.html   Original Chinese UI, same gating
 //
 // The build is deterministic and content-keyed: translations live in
 // tools/i18n/*.json keyed by the original text, so re-running the build after
@@ -18,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { rewriteComments, hasCJK } from './lib/scan.mjs';
 import { applyDevGating } from './lib/devtools.mjs';
+import { translateStrings, collectStrings } from './lib/i18n.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '..');
@@ -38,6 +40,13 @@ const tail = src.slice(jsEnd);
 
 const i18nDir = resolve(here, 'i18n');
 const readJSON = (name) => JSON.parse(readFileSync(resolve(i18nDir, name), 'utf8'));
+
+// Translations are split by area (units, buildings, panels, ...) purely for
+// reviewability; the build merges them into one dictionary.
+const uiStrings = Object.assign({}, ...readdirSync(i18nDir)
+  .filter((f) => f.startsWith('strings-') && f.endsWith('.json'))
+  .sort()
+  .map(readJSON));
 
 const comments = Object.assign({}, ...readdirSync(i18nDir)
   .filter((f) => f.startsWith('comments-') && f.endsWith('.json'))
@@ -93,13 +102,31 @@ function emit(relPath, markupPart, jsPart, lang) {
 
 const zh = emit('zh/index.html', strippedMarkup, gatedJs, 'zh');
 
+const enMarkup = translateStrings(strippedMarkup, uiStrings, report, { markup: true });
+// A few Chinese words are object *keys* rather than string literals, so the
+// string translator never sees them; they are patched by exact text instead.
+const enJs = readJSON('patches-en.json').reduce((js2, { from, to }) => {
+  if (!js2.includes(from)) throw new Error(`patch no longer matches the source: ${from}`);
+  return js2.split(from).join(to);
+}, translateStrings(gatedJs, uiStrings, report, { markup: false }));
+const en = emit('index.html', enMarkup, enJs, 'en');
+
 // --- 4. report ---------------------------------------------------------------
 const uniq = (a) => [...new Set(a)];
+report.missingStrings = uniq(report.missingStrings);
 report.missingComments = [...new Map(report.missingComments.map((c) => [c.key, c])).values()];
 
 console.log(`source        ${srcPath}`);
+console.log(`built         ${en.relPath} (${(en.bytes / 1024).toFixed(0)} KB, en)`);
 console.log(`built         ${zh.relPath} (${(zh.bytes / 1024).toFixed(0)} KB, zh)`);
 console.log(`comments      ${report.commentsKept} kept, ${report.commentsDropped} dropped`);
+
+if (report.missingStrings.length) {
+  console.log(`\n${report.missingStrings.length} UI string(s) have no English translation:`);
+  for (const s of report.missingStrings.slice(0, 40)) console.log(`  ${JSON.stringify(s)}`);
+  if (report.missingStrings.length > 40) console.log(`  ... and ${report.missingStrings.length - 40} more`);
+  console.log('Add them to a tools/i18n/strings-*.json and rebuild.');
+}
 
 // The originals stay out of this repo, so the review dump is written wherever
 // REPORT_COMMENTS points -- typically a scratch directory next to the source.
@@ -108,6 +135,12 @@ if (process.env.REPORT_COMMENTS) {
   console.log(`\nWrote ${report.missingComments.length} untranslated comments to ${process.env.REPORT_COMMENTS}`);
 }
 
-if (process.env.STRICT && (report.missingComments.length)) {
+if (process.env.DUMP_STRINGS) {
+  writeFileSync(resolve(i18nDir, 'all-strings.json'),
+    JSON.stringify(collectStrings(gatedJs, strippedMarkup), null, 1));
+  console.log('Wrote every translatable string for review.');
+}
+
+if (process.env.STRICT && (report.missingStrings.length || report.missingComments.length)) {
   process.exitCode = 1;
 }
