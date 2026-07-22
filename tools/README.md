@@ -1,6 +1,6 @@
 # Build tools
 
-The two playable files in this repository are generated:
+The playable files in this repository are generated:
 
 ```
 node tools/build.mjs [path-to-development-source]
@@ -9,6 +9,13 @@ node tools/build.mjs [path-to-development-source]
 produces `index.html` (English) and `zh/index.html` (the original Chinese UI)
 from one development source file. **Never edit the generated files** — the next
 build overwrites them.
+
+```
+node tools/build-tests.mjs [path-to-development-suite]
+```
+
+produces `tests/headless-test.mjs` the same way. See
+[the test suite's own notes](../tests/README.md) for what it covers.
 
 The development source is not in this repository. Running the build therefore
 requires the private repository; the tools are here because the pipeline is part
@@ -71,9 +78,31 @@ it after load lets a variable number of frames tick first, which means the two
 builds start from different worlds and diverge for reasons that have nothing to
 do with the change being tested.
 
-The regression suite is the other half of this: it runs unmodified against
-`zh/index.html`, so the build is proven not to have altered behaviour at all
-(559 assertions, 0 failures at the time of the last build).
+The regression suite is the other half of this: `tests/headless-test.mjs` runs
+against `zh/index.html`, so the build is proven not to have altered behaviour at
+all (559 assertions, 0 failures). Both run in CI on every push.
+
+## Building the test suite
+
+`build-tests.mjs` is the same pipeline pointed at the development harness, with
+three differences:
+
+- Only the *label* arguments of `check(...)` and `console.log(...)` are
+  translated. Every other string is left alone, because many of them are the
+  interface text an assertion compares against — "translating" one of those
+  would not be a translation, it would be a broken test.
+- Assertions are written as template literals of page code, and those carry
+  their own commentary. The outer lexer reports a template's body as a single
+  span, so comments inside it have to be lexed a second time within the span.
+- The target URL, the Chrome path and Chrome's argument list are rewritten to be
+  overridable, so a clone can run the suite against its own checkout and CI can
+  pass `--no-sandbox`.
+
+Test names are keyed by their original text (`i18n/test-names-*.json`) and
+commentary by a hash of the original (`i18n/test-comments-*.json`), for the same
+reasons as the game build. A test that is renamed upstream is reported as
+missing rather than silently published in Chinese; `STRICT=1` turns that into a
+non-zero exit, and `DUMP=<dir>` writes both lists out for translation.
 
 ## Updating after the source changes
 

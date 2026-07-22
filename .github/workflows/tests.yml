@@ -1,0 +1,40 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # ubuntu-latest ships Google Chrome; fail loudly rather than silently
+      # falling back to a different engine, since the suite asserts on layout
+      # in a few places.
+      - name: Locate Chrome
+        run: |
+          which google-chrome || which google-chrome-stable
+          google-chrome --version || google-chrome-stable --version
+
+      # The two published builds must simulate identically: this is what proves
+      # translating the interface did not touch the game.
+      - name: Builds are the same game
+        env:
+          CHROME: /usr/bin/google-chrome
+          CHROME_ARGS: --no-sandbox
+        run: node tools/verify-builds.mjs
+
+      - name: Regression suite
+        env:
+          CHROME: /usr/bin/google-chrome
+          CHROME_ARGS: --no-sandbox
+        run: node tests/headless-test.mjs

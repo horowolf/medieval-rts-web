@@ -19,8 +19,12 @@ const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/M
 const PORT = 9444;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// CI runs as root in a container, where Chrome refuses to start without --no-sandbox.
+const CHROME_ARGS = process.env.CHROME_ARGS ? process.env.CHROME_ARGS.split(' ').filter(Boolean) : [];
+
 const chrome = spawn(CHROME, ['--headless=new', '--disable-gpu', '--no-first-run',
-  `--remote-debugging-port=${PORT}`, '--user-data-dir=/tmp/cdp-rts-verify', 'about:blank'], { stdio: 'ignore' });
+  `--remote-debugging-port=${PORT}`, '--user-data-dir=/tmp/cdp-rts-verify',
+  ...CHROME_ARGS, 'about:blank'], { stdio: 'ignore' });
 
 async function getWS() {
   for (let i = 0; i < 60; i++) {

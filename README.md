@@ -1,5 +1,7 @@
 # Medieval RTS
 
+[![tests](https://github.com/horowolf/medieval-rts-web/actions/workflows/tests.yml/badge.svg)](https://github.com/horowolf/medieval-rts-web/actions/workflows/tests.yml)
+
 A touch-first real-time strategy game that runs in a browser. One HTML file, no
 dependencies, no build step to play it — open the page and you are in a game.
 
@@ -108,9 +110,12 @@ interface is proven not to have touched behaviour.
 - **Data-driven where it counts.** Adding a unit is adding a row to a table: the
   formation system, the AI's threat weighting, the counter relationships and the
   production panel all pick it up without any code naming that unit.
-- **Tests.** 559 headless assertions drive the real page through the Chrome
-  DevTools Protocol and check simulation behaviour, not DOM snapshots —
-  pathfinding, fog, combat maths, AI command legality, save/load determinism.
+- **Tests.** [559 headless assertions](tests/README.md) drive the real page
+  through the Chrome DevTools Protocol and check simulation behaviour, not DOM
+  snapshots — pathfinding, fog, combat maths, AI command legality, save/load
+  determinism. Run them yourself with `node tests/headless-test.mjs`. Most of
+  them pair a mechanism firing with a control run where it is switched off,
+  because a test that would still pass with the feature deleted is not evidence.
 - **Profiled, not guessed.** Pathfinding was 85% of simulation time on the large
   maps; the fix was a binary heap that had to be proven bit-identical to the
   linear scan it replaced, ties and all, so no balance baseline moved.
@@ -120,7 +125,8 @@ interface is proven not to have touched behaviour.
 ```
 index.html        the game, English UI          (generated)
 zh/index.html     the game, original Chinese UI (generated)
-tools/            the build that produces both from the development source
+tests/            the headless regression suite (generated)
+tools/            the build that produces all three from the development source
 docs/             architecture notes
 ```
 
