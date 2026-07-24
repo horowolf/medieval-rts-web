@@ -3508,6 +3508,7 @@ try {
     arenaMode=true;aiWave=99999;gameOver=null;terr.fill(T_PLAIN);blocked.fill(0);paintTerrain();computeLandComp();
     explored.fill(1);exploredE.fill(1);visible.fill(1);visibleE.fill(1);
     for(const k in stock)stock[k]=1e9;
+    for(const s of SIDES){s.starving=false;s.starveN=0;s.recoverT=0;}
     const R={};
     R.setupDeclared = UT.catapult.setup>0 && !UT.archer.setup && !UT.spear.setup; /* Only siege units have a setup time. */
 
@@ -4074,7 +4075,7 @@ try {
     const fboat=spawnUnit(1,'fishing',C(30,10).x,C(30,10).y,null);
     R.fishIncome = dbg.aiFoodIncome(1)>0; fboat.hp=0;
     R.foodIncomeCausal = incFood>0 && incNone===0;
-    stockOf(1).food=60;
+    stockOf(1).food=150;
     const capWreck=dbg.aiMilCap(1);
     stockOf(1).food=0;
     const capDrain=dbg.aiMilCap(1);
@@ -5067,6 +5068,7 @@ try {
 
     const medSetup=(lv,st)=>{world();placeB(0,'tc',3,20,true);placeB(1,'tc',44,20,true);freshAi(lv||'boss');villagers=villagers.filter(v=>false);
       techOf(1).researched.add('U3');techOf(1).age=3;recomputeTechMod(1);dbg.A(1).state=st;dbg.A(1).sT=t;
+      stockOf(1).food=1e6;
       return dbg.aiMilWant(1);};
     {const w=medSetup('boss','develop');R.medDevelop=(w.medic||0)>=1;}
     {const w=medSetup('boss','allin');R.medScales=(w.medic||0)>=2&&(w.medic||0)<=AI_MED_MAX;}
@@ -5865,26 +5867,30 @@ try {
   check('who controls the scout list (from play-testing: \"the red scout showed up on my side and I could call it over and kill it\"): AI scouts share the scouts array but must **not** appear in the player\'s scout list = there is no channel to order them',
     t110.scoutBothExist&&t110.scoutBarMineOnly&&t110.scoutBarNoFoe, t110);
 
-  console.log('\n[111] the map registry (\"I want a few more maps to try, and the water map is old and a bit small\"): five maps at a uniform size + **strict left-right mirroring, map by map** (terrain, resources, opening positions) = the fairness clause, in hard form (there is form here: an enemy town centre hand-entered as 104 instead of 106 gave side 1 a near-100% win rate)');
+  console.log('\n[111] 多地圖登錄表（2026-07-20 使用者「想要多幾張試玩的地圖」＋2026-07-23 加🎲隨機生成）：尺寸統一＋**逐圖嚴格對稱**（地形/資源/起手位·左右鏡射 mir 或點對稱 pt）＝公平硬條款（側偏前科：2026-07-17 敵 TC 手填 104 而非 106＝side1 近 100% 勝）');
   const t111 = await ev(`
     const R={},G=dbg.MAP_GEN(),ids=Object.keys(G);
     R.ids=ids;
-    R.fiveMaps=ids.length===5&&ids.includes('land')&&ids.includes('naval')&&ids.includes('arena')&&ids.includes('plains')&&ids.includes('highland');
+    R.staticMaps=['land','naval','arena','plains','highland'].every(k=>ids.includes(k));
+    R.hasGen=ids.includes('gen');
     R.sameSize=ids.every(k=>G[k].tw===128&&G[k].th===72);
     R.tcMirrored=ids.every(k=>dbg.mirTx(G[k].ptc[0])===128-G[k].ptc[0]-2);
     R.tcOnOwnHalf=ids.every(k=>G[k].ptc[0]+2<64&&dbg.mirTx(G[k].ptc[0])>64);
     const savedTerr=Uint8Array.from(terr),savedNodes=nodes.slice();
     const asym={},nodeAsym={};
     for(const k of ids){
+      const pt=G[k].sym==='pt';
       terr.fill(T_PLAIN); G[k].paint();
       let bad=0;
-      for(let y=0;y<TH;y++)for(let x=0;x<TW;x++)if(terr[idx(x,y)]!==terr[idx(TW-1-x,y)])bad++;
+      for(let y=0;y<TH;y++)for(let x=0;x<TW;x++){
+        const j=pt?idx(TW-1-x,TH-1-y):idx(TW-1-x,y);
+        if(terr[idx(x,y)]!==terr[j])bad++;}
       asym[k]=bad;
       nodes.length=0; G[k].nodes();
       let nb=0;
       for(const n of nodes){
-        const mx=W-n.x;
-        if(!nodes.some(o=>o.type===n.type&&Math.abs(o.x-mx)<1&&Math.abs(o.y-n.y)<1&&o.max===n.max))nb++;}
+        const mx=W-n.x, my=pt?H-n.y:n.y;
+        if(!nodes.some(o=>o.type===n.type&&Math.abs(o.x-mx)<1&&Math.abs(o.y-my)<1&&o.max===n.max))nb++;}
       nodeAsym[k]=nb;
       R['n_'+k]=nodes.length;
     }
@@ -5894,14 +5900,56 @@ try {
     R.allHaveNodes=ids.every(k=>R['n_'+k]>0);
     terr.set(savedTerr); nodes.length=0; for(const n of savedNodes)nodes.push(n); paintTerrain(); computeLandComp();
     return R;`);
-  check('multiple maps: all five (land, water, pure arena, plains economy, terrain) are 128×72 = the water map has been scaled up from 64×36; every map has resource nodes',
-    t111.fiveMaps&&t111.sameSize&&t111.allHaveNodes, t111);
-  check('map fairness clause: **terrain** is strictly mirrored left to right on every map (terr[x,y] === terr[TW-1-x,y] for every tile, 0 differences)',
+  check('多地圖：五張手工圖（陸戰/水域/純擂台/平地經濟/地形）＋🎲隨機生成皆 128×72·各圖都有資源點',
+    t111.staticMaps&&t111.hasGen&&t111.sameSize&&t111.allHaveNodes, t111);
+  check('多地圖公平硬條款：逐圖**地形**嚴格對稱（左右鏡射 terr[x,y]===terr[TW-1-x,y]／點對稱 ===terr[TW-1-x,TH-1-y]·差 0 格）',
     t111.allTerrSym, t111);
-  check('map fairness clause: **resource nodes** are strictly mirrored left to right on every map (every node has a counterpart of the same type and amount at W-x)',
+  check('多地圖公平硬條款：逐圖**資源點**嚴格對稱（每點在鏡射/點對稱位置有同型同量對應點）',
     t111.allNodeSym, t111);
   check('map opening positions: the enemy town centre is the strict tile mirror of the player\'s (mirTx; a 2×2 town centre = TW-tx-2); each side sits in its own half = the source of the old side bias is structurally closed off',
     t111.tcMirrored&&t111.tcOnOwnHalf, t111);
+
+  console.log('\n[111b] 🎲 隨機地圖生成器（2026-07-23 使用者「製作新地圖」）：純函式確定性＋多樣性＋兩種對稱模式＋**資源可見性**（每種資源都在起手 TC 附近·治「平地經濟圖森林 20 格外＝缺木卡住」）');
+  const t111b = await ev(`
+    const R={},P=dbg.genMapPlan;
+    R.determ=JSON.stringify(P(777))===JSON.stringify(P(777));
+    R.variety=JSON.stringify(P(777))!==JSON.stringify(P(1234));
+    const syms=new Set();for(let s=1;s<=80;s++)syms.add(P(s).sym);
+    R.bothSym=syms.has('mir')&&syms.has('pt');
+    const types=['wood','food','gold','stone','iron'];
+    let visBad=0,worst=0;
+    for(let s=1;s<=40;s++){
+      const pl=P(s),[px,py]=pl.ptc;
+      for(const tp of types){
+        let best=999;
+        for(const [t2,tx,ty] of pl.nodeOps)if(t2===tp)best=Math.min(best,Math.max(Math.abs(tx-px),Math.abs(ty-py)));
+        worst=Math.max(worst,best);
+        if(best>12)visBad++;
+      }
+    }
+    R.visBad=visBad; R.worstDist=worst;
+    R.visOK=visBad===0;
+    let missAny=0;
+    for(let s=1;s<=40;s++){const pl=P(s),have=new Set(pl.nodeOps.map(o=>o[0]));if(!types.every(t=>have.has(t)))missAny++;}
+    R.allFiveTypes=missAny===0;
+    const savedTerr=Uint8Array.from(terr),savedNodes=nodes.slice();
+    let ptSeed=1;for(let s=1;s<=80;s++){if(P(s).sym==='pt'){ptSeed=s;break;}}
+    let mirSeed=1;for(let s=1;s<=80;s++){if(P(s).sym==='mir'){mirSeed=s;break;}}
+    const applySym=(pl)=>{terr.fill(T_PLAIN);dbg.applyGenTerrain(pl);nodes.length=0;dbg.applyGenNodes(pl);
+      const pt=pl.sym==='pt';let tb=0,nb=0;
+      for(let y=0;y<TH;y++)for(let x=0;x<TW;x++){const j=pt?idx(TW-1-x,TH-1-y):idx(TW-1-x,y);if(terr[idx(x,y)]!==terr[j])tb++;}
+      for(const n of nodes){const mx=W-n.x,my=pt?H-n.y:n.y;if(!nodes.some(o=>o.type===n.type&&Math.abs(o.x-mx)<1&&Math.abs(o.y-my)<1&&o.max===n.max))nb++;}
+      return {tb,nb};};
+    const aPt=applySym(P(ptSeed)),aMir=applySym(P(mirSeed));
+    R.ptSeed=ptSeed;R.mirSeed=mirSeed;R.applySym=(aPt.tb===0&&aPt.nb===0&&aMir.tb===0&&aMir.nb===0);
+    terr.set(savedTerr);nodes.length=0;for(const n of savedNodes)nodes.push(n);paintTerrain();computeLandComp();
+    return R;`);
+  check('🎲 生成器：純函式確定性（同種子同圖）＋多樣性（異種子異圖）＋兩種對稱模式（左右鏡射/點對稱）都生得出',
+    t111b.determ&&t111b.variety&&t111b.bothSym, t111b);
+  check('🎲 資源可見性硬條款：抽 40 種子·每張圖每種資源（木/食/金/石/鐵）都有一處在起手 TC ≤12 格內（治缺木卡住）',
+    t111b.visOK&&t111b.allFiveTypes, t111b);
+  check('🎲 應用階段對稱：套地形＋資源後逐格/逐點對稱＝0（pt 與 mir 各抽一張都過）',
+    t111b.applySym, t111b);
 
   console.log('\n[112] closing the naval triangle: war galley range back to 150 (shore bombardment and attacking buildings belong to the siege ship; the feudal navy\'s job is blockade) + fire ship speed 104→90 (so the siege ship gets two volleys off and its splash catches massed fire ships) = the triangle closes on fleets alone');
   const t112 = await ev(`
@@ -6037,7 +6085,7 @@ try {
   check('home screen: a load with query parameters (harness, spectator, a shared link) = the home screen is hidden and the simulation is not frozen (zero disturbance to existing entry points)',
     t114.hidden===true && t114.notPaused===true && t114.hasSearch===true, t114);
   check('the home screen menus are generated from the data tables (map, difficulty and civilisation); the difficulty disclosure text comes from the same function as the ⚙️ panel\'s (the boss\'s gathering ×1.2 is disclosed)',
-    t114.mapRow===5 && t114.diffRow===6 && t114.civRow>=3 && t114.discloseShared===true
+    t114.mapRow===6 && t114.diffRow===6 && t114.civRow>=3 && t114.discloseShared===true
     && t114.fairHard===true && t114.cheatBoss===true && t114.bossListsGather===true
     && t114.hintAll===true, t114);
   check('opponent civilisation selectability: choosable below Hard; boss, shura and god are always random (the home screen and the ⚙️ panel share the one rule, so you cannot reopen ⚙️ to get around it)',
@@ -6634,6 +6682,27 @@ try {
     t123.roSaveBtns === 0 && /首頁/.test(t123.roWhy) && /首頁/.test(t123.roThrows), t123);
   check('the read-only flag can be cleared: opening the panel in game shows 💾 on every slot (the save feature was not locked out along with it)',
     t123.gameSaveBtns === t123.slots && t123.gameWhy === '', t123);
+
+  console.log('\n[124] 🍞 缺糧恢復節流（2026-07-23 經濟再基準輪）：補糧到 ≥10 不再一補就秒清倒數＝堵「高軍耗每 ~19s 補糧到 10 就重置、永遠吃不到懲罰」漏洞');
+  const t124 = await ev(`
+    const R={};const S0=S_(0);const N=s=>Math.ceil(s/TICK);
+    const reset=()=>{for(const s of SIDES){s.starving=false;s.starveN=0;s.recoverT=0;}for(const k in stock)stock[k]=0;};
+    R.recoverIntDeclared = typeof RECOVER_INT==='number' && RECOVER_INT>0;
+    reset(); for(let i=0;i<N(22)&&!S0.starving;i++){stock.food=0;step(TICK);}
+    R.reachedStarving = S0.starving===true && S0.starveN>=3;
+    stock.food=10; for(let i=0;i<N(RECOVER_INT*0.5);i++)step(TICK);
+    R.briefFeedNoClear = S0.starving===true && S0.starveN===3;
+    stock.food=1000; for(let i=0;i<N(RECOVER_INT+1);i++)step(TICK);
+    R.sustainedRecovers = S0.starveN<3 && S0.starving===false;
+    reset(); S0.starveN=3; S0.starving=true;
+    for(let cyc=0;cyc<4;cyc++){ stock.food=10; for(let i=0;i<N(RECOVER_INT*0.6);i++)step(TICK); stock.food=0; step(TICK); }
+    R.oscillNoRecover = S0.starveN===3 && S0.starving===true;
+    reset(); for(const k in stock)stock[k]=1e9;
+    return R;`);
+  check('缺糧恢復節流常數已宣告（RECOVER_INT>0）＋基線：糧=0 撐過 3 段預警(+20s) 降效生效', t124.recoverIntDeclared && t124.reachedStarving, t124);
+  check('反漏洞：降效中補糧到 10 但短於 RECOVER_INT＝降效不解、倒數不歸零（舊碼此處 starveN 秒歸 0＝花錢跳懲罰）', t124.briefFeedNoClear, t124);
+  check('真恢復救得回：糧連續 ≥10 撐滿 RECOVER_INT＝退一格＝starveN<3 才解降效（經濟真修好＝懲罰該解）', t124.sustainedRecovers, t124);
+  check('節流是「連續 ≥10」判定：中途跌破 10 就重置恢復計時＝震盪補糧湊不滿窗＝懲罰黏住（重赤字跳不掉）', t124.oscillNoRecover, t124);
 
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);
 } catch (e) {

@@ -106,6 +106,8 @@
   "無高地、只有零星林·資源豐厚分散＝經濟營運與擴張驗證（平衡輪第②層）": "No high ground and only scattered woods, with rich resources spread wide — an economic map.",
   "地形圖": "Passes",
   "高地/坡道/林隘口密集·中央高地控制點＝地形與視野戰驗證（平衡輪第③層）": "Dense plateaus, ramps and wooded chokepoints around a central height — terrain and sight lines decide it.",
+  "隨機生成": "Random",
+  "種子隨機生成的對稱地圖（每種資源都在起手附近·左右鏡射或點對稱＝公平）——首頁留空種子＝每次一張新圖；填種子＝可重現/分享/存檔的固定圖": "A seed-generated symmetric map: every resource sits near your start, mirrored left-to-right or rotationally so both sides stay fair. Leave the seed blank on the menu for a fresh map each time; set a seed for a fixed map you can reproduce, share or save.",
   "經濟採集": "Economy",
   "軍事攻防": "Warfare",
   "視野偵察": "Reconnaissance",

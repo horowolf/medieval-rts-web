@@ -295,7 +295,7 @@
   <div id="toolsMenu" class="hidden">
     <button id="dbgBtn" type="button" title="Debug: coordinates, paths, movement log">🐞 Debug</button>
     <button id="arenaBtn" type="button" title="Arena: test battles on flat ground, no economy">⚔️ Arena</button>
-    <button id="mapBtn" type="button" title="Switch map (reloads)">🌊 Map</button>
+    <button id="mapBtn" type="button" title="Back to the menu to re-pick map, opponent or seed (starts a new game)">🗺 Change map</button>
     <button id="diffBtn" type="button" title="Opponent difficulty and civilisation, plus AI-vs-AI spectating (starts a new game)">⚙️ Opponent</button>
     <button id="saveBtn" type="button" title="Save / load (kept on this device, exportable to a file)">💾 Save</button>
   </div>
@@ -570,6 +570,68 @@ const STR={
 };
 function fmt(s,o){return s.replace(/\{(\w+)\}/g,(m,k)=>o[k]);}
 
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function genMapPlan(mseed){
+  const GTW=128,GTH=72,gr=mulberry32((mseed|0)||1);
+  const rint=(a,b)=>a+((gr()*(b-a+1))|0);
+  const sym=gr()<0.5?'mir':'pt';
+  const px=rint(16,22);
+  const py=sym==='mir'?rint(30,42):rint(15,27);          
+  const theme=['open','open','wood'][(gr()*3)|0];         
+  const cxT=px+1,cyT=py+1;                                
+  const clampX=x=>Math.max(3,Math.min(60,x));            
+  const clampY=y=>Math.max(4,Math.min(GTH-5,y));
+  const terr=[],nodeOps=[];
+  
+  const ring=['wood','food','food','gold','stone','iron'];
+  for(let i=ring.length-1;i>0;i--){const j=(gr()*(i+1))|0;const s=ring[i];ring[i]=ring[j];ring[j]=s;}
+  const NR=ring.length;
+  ring.forEach((tp,i)=>{
+    const ang=(i/NR)*Math.PI*2+(gr()-0.5)*0.6, r=7+gr()*4;
+    const tx=clampX(Math.round(cxT+Math.cos(ang)*r)), ty=clampY(Math.round(cyT+Math.sin(ang)*r));
+    if(tp==='wood')for(let k=0;k<3;k++)nodeOps.push(['wood',tx,clampY(ty+k),400]); 
+    else nodeOps.push([tp,tx,ty,rint(520,620)]);
+  });
+  
+  const exN=rint(3,4);
+  for(let i=0;i<exN;i++)nodeOps.push([['gold','stone','iron','food'][i%4],clampX(rint(40,58)),clampY(rint(10,GTH-11)),rint(760,840)]);
+  nodeOps.push([['gold','stone','iron'][(gr()*3)|0],clampX(rint(56,61)),clampY(rint(24,GTH-25)),700]);
+  
+  const fN=theme==='wood'?rint(3,4):rint(1,2);
+  for(let i=0;i<fN;i++){
+    const w=rint(2,4),h=rint(2,4),x0=clampX(rint(24,54)),y0=clampY(rint(8,GTH-9));
+    const x1=Math.min(61,x0+w),y1=Math.min(GTH-4,y0+h);
+    const outside=x0>cxT+12||x1<cxT-12||y0>cyT+12||y1<cyT-12; 
+    if(outside)terr.push([x0,y0,x1,y1,3]); // 3=T_FOREST
+  }
+  return {sym,ptc:[px,py],theme,terr,nodeOps,mseed:(mseed|0)||1};
+}
+function applyGenTerrain(plan){ 
+  for(const [x0,y0,x1,y1,tp] of plan.terr){
+    trect(x0,y0,x1,y1,tp);
+    if(plan.sym==='pt')trect(TW-1-x1,TH-1-y1,TW-1-x0,TH-1-y0,tp);
+    else trect(TW-1-x1,y0,TW-1-x0,y1,tp);
+  }
+}
+function applyGenNodes(plan){
+  const P=(tx,ty)=>[(tx+0.5)*TILE,(ty+0.5)*TILE];
+  const snap=(tx,ty)=>{ 
+    if(terr[idx(tx,ty)]!==T_FOREST)return[tx,ty];
+    for(let r=1;r<=3;r++)for(const [dx,dy] of [[r,0],[-r,0],[0,r],[0,-r],[r,r],[-r,-r],[r,-r],[-r,r]]){
+      const nx=tx+dx,ny=ty+dy;if(nx>=2&&ny>=2&&nx<TW-1&&ny<TH-1&&terr[idx(nx,ny)]!==T_FOREST)return[nx,ny];}
+    return[tx,ty];
+  };
+  for(const [type,tx,ty,amt] of plan.nodeOps){
+    const [ax,ay]=type==='wood'?[tx,ty]:snap(tx,ty);
+    addN(type,[[...P(ax,ay),amt]]);
+    if(plan.sym==='pt')addN(type,[[...P(TW-1-ax,TH-1-ay),amt]]);
+    else addN(type,[[...P(TW-1-ax,ay),amt]]);
+  }
+}
+const GEN_SEED=(()=>{const s=new URLSearchParams(location.search).get('seed'),n=parseInt(s,10);return(s&&n>0)?n:20260723;})();
+const GEN_PLAN=genMapPlan(GEN_SEED);
+
 /* ============ 1. Constants ============ */
 /* Map registry. Each map supplies its size, a terrain painter, a resource
    placer, starting positions and a routing style for AI attack waves.
@@ -593,6 +655,8 @@ const MAP_DEFS={
             desc:'No high ground and only scattered woods, with rich resources spread wide — an economic map.'},
   highland:{nm:'Passes',   ic:'⛰️', tw:128,th:72, paint:()=>paintHighlandTerrain(), nodes:()=>addHighlandNodes(), ptc:[18,34], routes:'ns',
             desc:'Dense plateaus, ramps and wooded chokepoints around a central height — terrain and sight lines decide it.'},
+  gen:     {nm:'Random', ic:'🎲', tw:128,th:72, paint:()=>applyGenTerrain(GEN_PLAN),nodes:()=>applyGenNodes(GEN_PLAN),ptc:GEN_PLAN.ptc, sym:GEN_PLAN.sym, routes:'ns',
+            desc:'A seed-generated symmetric map: every resource sits near your start, mirrored left-to-right or rotationally so both sides stay fair. Leave the seed blank on the menu for a fresh map each time; set a seed for a fixed map you can reproduce, share or save.'},
 };
 const MAP_ID=(()=>{const m=new URLSearchParams(location.search).get('map');return MAP_DEFS[m]?m:'land';})();
 const MAP_DEF=MAP_DEFS[MAP_ID];
@@ -667,6 +731,8 @@ const UT={
 const PROD_BLD=new Set(Object.values(UT).map(u=>u.bld)); 
 const SCT={nm:STR.u_scout,ch:STR.uc_scout,hp:28,sp:130,vis:9,cost:{food:50,gold:20},bt:10,aM:0,aP:0}; 
 const VIL={ch:'👤',cost:{food:50},bt:8}; 
+
+const UPKEEP_MULT=2.5;
 const VBOW={rng:110,dmg:2,cd:1.5}; 
 const ARROW_TURN=3.2; 
 const SPLASH_EDGE=0.4; 
@@ -839,7 +905,7 @@ function mkSideState(si){return {
   shares:{wood:1,stone:1,iron:1,gold:1,food:1},
   priceIdx:{wood:1,stone:1,iron:1,food:1},
   bell:false,garrisonOn:true,repairOn:false,stance:'flee', 
-  starving:false,curUpkeep:0,starveN:0,starveT:0,
+  starving:false,curUpkeep:0,starveN:0,starveT:0,recoverT:0,
   scripted:si===1&&!aiEco, 
   aiCheat:{gather:1,tech:0}, 
   tags:Array.from({length:8},(_,i)=>({i,task:'guard',rule:'counter',pt:null,focus:null,seq:0,side:si,holdFire:false,zoneAnchor:null,patrolIdx:0,holdB:null,spread:'dense'})), 
@@ -1315,10 +1381,10 @@ function cqCount(u,si){let n=0;si=si||0;for(const b of buildings)if(b.cq&&b.side
 function hasCC(side){return buildings.some(b=>b.side===side&&b.hp>0&&BT[b.type].cc);}        
 function hasCapital(side){return buildings.some(b=>b.side===side&&b.hp>0&&b.type==='tc');}    
 function nLives(side){return buildings.filter(b=>b.side===side&&b.hp>0&&BT[b.type].life).length;} 
-/* Three-stage starvation warnings and upkeep are per side; scripted sides pay
-   neither. */
 
-for(const [nm,k] of [['turtleBell','bell'],['garrisonOn','garrisonOn'],['repairOn','repairOn'],['stance','stance'],['starving','starving'],['starveN','starveN'],['starveT','starveT'],['curUpkeep','curUpkeep']])
+const RECOVER_INT=10; 
+
+for(const [nm,k] of [['turtleBell','bell'],['garrisonOn','garrisonOn'],['repairOn','repairOn'],['stance','stance'],['starving','starving'],['starveN','starveN'],['starveT','starveT'],['recoverT','recoverT'],['curUpkeep','curUpkeep']])
   Object.defineProperty(window,nm,{get:()=>SIDES[0][k],set:v=>{SIDES[0][k]=v;}});
 let foodRate=0,foodAcc=0,foodRateT=0,foodWarn=false; 
 const prodAcc={wood:0,stone:0,iron:0,gold:0,food:0},prodRate={wood:0,stone:0,iron:0,gold:0,food:0}; 
@@ -1526,7 +1592,9 @@ function onBuilt(b){
    was exactly a typed-in value two tiles off, which shortened one side's opening
    gathering loop and compounded into a lopsided win rate. */
 const mirTx=(tx,w=2)=>TW-tx-w; 
-const START={ptc:MAP_DEF.ptc,etc:[mirTx(MAP_DEF.ptc[0]),MAP_DEF.ptc[1]],
+const mirTy=(ty,h=2)=>TH-ty-h; 
+const START={ptc:MAP_DEF.ptc,
+  etc:MAP_DEF.sym==='pt'?[mirTx(MAP_DEF.ptc[0]),mirTy(MAP_DEF.ptc[1])]:[mirTx(MAP_DEF.ptc[0]),MAP_DEF.ptc[1]], 
   pbar:MAP_DEF.pbar,ebar:MAP_DEF.ebar,etw:MAP_DEF.etw}; 
 /* Both sides open with a town centre and villagers, nothing else. Barracks,
    towers and castles are for the player to decide on -- and for the AI to decide
@@ -2207,11 +2275,7 @@ function villThreat(v){
 /* A building counts as besieged when an enemy is within 240px, which is what
    locks automatic repair out of danger. */
 function underFire(b){return units.some(e=>e.side!==b.side&&e.hp>0&&Math.hypot(e.x-b.x,e.y-b.y)<240);}
-/* Emergency repair target: a damaged, besieged, still-standing friendly building,
-   nearest and within 420px -- nobody is pulled across the map to die.
-   Where garrisoning is also possible, hysteresis on the building decides: above
-   75% HP villagers stay hidden, below 40% they come out to repair, so they do not
-   oscillate in and out of the door. */
+
 function besiegedTarget(v){
   let best=null,bd=1e9;
   for(const b of buildings){
@@ -3462,7 +3526,7 @@ function bTick(b,dt){
       releaseVillagers(b,false,3);if(b.side===0)alertMsg('white',STR.msg_threatOver); 
     }
     
-    if(S_(b.side).repairOn&&S_(b.side).garrisonOn){const f=b.hp/b.maxHp;if(f<0.40)b.repairCall=true;else if(f>0.75)b.repairCall=false;}
+    if(S_(b.side).repairOn&&S_(b.side).garrisonOn){const f=b.hp/b.maxHp;if(f<0.30)b.repairCall=true;else if(f>0.75)b.repairCall=false;}
   }
   if(PROD_BLD.has(b.type)&&b.queue.length){ 
     if(!S_(b.side).starving){ 
@@ -5013,7 +5077,7 @@ const AI_SIEGE_PROF={
   shura: {base:3,per:70, ramp:6,max:10},
   god:   {base:4,per:60, ramp:6,max:12}};
 const AI_FORT_T=new Set(['tower','castle','wall','gate']); 
-const AI_UPKEEP_PER_STR=0.055;            
+const AI_UPKEEP_PER_STR=0.055*UPKEEP_MULT; 
 const AI_SUPPLY_FLOOR=4;                  
 const AI_SUPPLY_HORIZON=120;              
 const AI_VILL_FOOD_PS=2;                  
@@ -7192,9 +7256,10 @@ function step(dt){
   for(const sd of SIDES){
     if(sd.scripted){sd.curUpkeep=0;continue;}
     let up=0;
-    for(const u of units)if(u.side===sd.i&&u.hp>0)up+=UT[u.type].up||0;
+    for(const u of units)if(u.side===sd.i&&u.hp>0)up+=(UT[u.type].up||0)*UPKEEP_MULT;
     sd.curUpkeep=up*sd.mod.upkeep; 
     if(sd.curUpkeep>0)sd.stock.food-=sd.curUpkeep*dt;
+    if(sd.stock.food<10)sd.recoverT=0; 
     if(sd.stock.food<=0){
       sd.stock.food=0;
       
@@ -7207,8 +7272,14 @@ function step(dt){
         }
       }
     }else if(sd.stock.food>=10){
-      if(sd.starving){sd.starving=false;if(sd.i===0)alertMsg('white',STR.msg_starveOff);}
-      sd.starveN=0; 
+      
+      if(sd.starveN>0){
+        if(!sd.recoverT)sd.recoverT=t;
+        else if(t-sd.recoverT>=RECOVER_INT){
+          sd.recoverT=t;sd.starveN--;
+          if(sd.starving&&sd.starveN<3){sd.starving=false;if(sd.i===0)alertMsg('white',STR.msg_starveOff);}
+        }
+      }
     }
   }
   
@@ -7350,6 +7421,19 @@ function bar(x,y,w,frac,col){
   ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(x-w/2,y,w,3.5);
   ctx.fillStyle=col;ctx.fillRect(x-w/2,y,w*Math.max(0,Math.min(1,frac)),3.5);
 }
+
+const _icOff=new Map();
+function iconOff(ic,font){
+  const key=font+ic;let off=_icOff.get(key);if(off!==undefined)return off;
+  const sz=48,oc=document.createElement('canvas');oc.width=oc.height=sz;
+  const o=oc.getContext('2d');o.textAlign='center';o.textBaseline='middle';o.font=font;o.fillStyle='#000';
+  o.clearRect(0,0,sz,sz);o.fillText(ic,sz/2,sz/2);
+  const d=o.getImageData(0,0,sz,sz).data;let minx=sz,maxx=-1;
+  for(let y=0;y<sz;y++)for(let x=0;x<sz;x++)if(d[(y*sz+x)*4+3]>16){if(x<minx)minx=x;if(x>maxx)maxx=x;}
+  off=maxx<0?0:((minx+maxx)/2-sz/2);   
+  _icOff.set(key,off);return off;
+}
+function drawIcon(ic,x,y,font){ctx.font=font;ctx.fillText(ic,x-iconOff(ic,font),y);}
 function render(){
   if(terrainDirty&&t-terrainPaintT>0.6){paintTerrain();terrainDirty=false;terrainPaintT=t;} 
   ctx.setTransform(1,0,0,1,0,0);
@@ -7388,7 +7472,7 @@ function render(){
     ctx.fillStyle=b.type==='fishtrap'?'rgba(46,88,96,.8)':(b.side===0?'#6b4a2c':'#6e3429'); 
     ctx.beginPath();ctx.roundRect(b.x-hw+3,b.y-hh+3,hw*2-6,hh*2-6,7);ctx.fill();
     ctx.strokeStyle=b.done?(b.side===0?'#caa86d':'#d08a7a'):'#888';ctx.lineWidth=2;ctx.stroke();
-    ctx.font=(b.size===2?'24':'17')+'px serif';ctx.fillText(T.ic,b.x,b.y-1);
+    drawIcon(T.ic,b.x,b.y-1,(b.size===2?'24':'17')+'px serif');
     bar(b.x,b.y-hh-7,hw*2-8,b.hp/b.maxHp,b.done?'#7fc25c':'#c2b35c');
     if((b.type==='farm'||b.type==='coppice')&&b.done&&b.node)
       bar(b.x,b.y+hh+3,hw*2-10,b.node.amt/b.node.max,b.type==='coppice'?'#7fae5c':'#e0a24f');
@@ -7579,9 +7663,11 @@ function render(){
       }
       if(e._stk){ctx.strokeStyle='#ff4040';ctx.lineWidth=2;ctx.beginPath();ctx.arc(e.x,e.y,11+2*Math.sin(t*6),0,7);ctx.stroke();}
     };
-    for(const u of units)if(u.hp>0&&!u.gar)drawPath(u,'#7fd0ff');
-    for(const s of scouts)if(s.hp>0)drawPath(s,'#7de8dc');
-    for(const v of villagers)if(alive(v)&&!v.garrisoned){drawPath(v,'#ffd27d');
+    
+    const dbgAll=spectate;
+    for(const u of units)if(u.hp>0&&!u.gar&&(dbgAll||u.side===0))drawPath(u,'#7fd0ff');
+    for(const s of scouts)if(s.hp>0&&(dbgAll||(s.side||0)===0))drawPath(s,'#7de8dc');
+    for(const v of villagers)if(alive(v)&&!v.garrisoned&&(dbgAll||(v.side||0)===0)){drawPath(v,'#ffd27d');
       if(v._idleLog){ctx.strokeStyle='#ff9030';ctx.lineWidth=2;ctx.beginPath();ctx.arc(v.x,v.y,9,0,7);ctx.stroke();}}
     if(dbgPick&&dbgPick.hp>0&&!dbgPick.gar&&!dbgPick.garrisoned){ 
       ctx.strokeStyle='#39e6ff';ctx.lineWidth=2.5;ctx.globalAlpha=.95;
@@ -8007,7 +8093,7 @@ function openProdPanel(b){
     if(el.classList.contains('hidden')){
       let txt=`<div>${STR.ui_statsHead}</div>`;
       for(const k of myUnits){const T=UT[k];
-        txt+=`<div>${T.ch} ${T.nm} | ${T.dmg} | ${T.aM||0} | ${T.aP||0} | ${T.vol} | ${Math.round((T.up||0)*60)}/min</div>`;}
+        txt+=`<div>${T.ch} ${T.nm} | ${T.dmg} | ${T.aM||0} | ${T.aP||0} | ${T.vol} | ${Math.round((T.up||0)*UPKEEP_MULT*60)}/min</div>`;}
       el.innerHTML=txt;el.classList.remove('hidden');
     }else el.classList.add('hidden');
     sndClick();
@@ -8330,7 +8416,7 @@ function openUnitPanel(u){
     const pm=(base,bon)=>bon>0?`${base}(+${bon})`:`${base}`;
     const atkB=proj?techMod.rangedAtk:techMod.meleeAtk;
     const sp=Math.round(T.sp*(T.mount?techMod.cavSpeed:1))+(T.mount&&techMod.cavSpeed>1?'↑':'');
-    const upk=(T.up||0)*techMod.upkeep,ud=techMod.upkeep<1?'↓':'';
+    const upk=(T.up||0)*UPKEEP_MULT*techMod.upkeep,ud=techMod.upkeep<1?'↓':'';
     const bnm=k=>UT[k]?UT[k].nm:(k==='building'?'buildings':k==='raid'?'farms, coppices and fish traps':k); 
     const bns=T.bonus?Object.entries(T.bonus).map(([k,v])=>`${bnm(k)}×${k==='raid'?(v*techMod.raidDmg)+(techMod.raidDmg>1?'↑':''):v}`).join(', '):STR.ui_carryNone;
     /* Range token: ranged units show the projectile range, medics their healing
@@ -8745,11 +8831,8 @@ function arenaSetup(comp0,comp1){
     arenaSetup(L,R);q('#arenaPanel').classList.add('hidden');q('#arenaBtn').classList.remove('on');sndClick();};
   q('#arenaBtn').onclick=()=>{const h=q('#arenaPanel').classList.toggle('hidden');q('#arenaBtn').classList.toggle('on',!h);toggleTools(false);sndClick();};
   
-  {const ids=Object.keys(MAP_DEFS),cur=ids.indexOf(MAP_ID),nx=MAP_DEFS[ids[(cur+1)%ids.length]],nxId=ids[(cur+1)%ids.length];
-   q('#mapBtn').textContent=`${nx.ic} ${nx.nm}`;q('#mapBtn').classList.toggle('on',MAP_ID!=='land');
-   q('#mapBtn').title=`Now: ${MAP_DEF.ic} ${MAP_DEF.nm}——${MAP_DEF.desc}\\nTap to switch to: ${nx.ic} ${nx.nm} (reloads)`;
-   q('#mapBtn').onclick=()=>{const u=new URL(location.href);
-     if(nxId==='land')u.searchParams.delete('map');else u.searchParams.set('map',nxId);location.href=u.href;};}
+  {q('#mapBtn').classList.toggle('on',MAP_ID!=='land');
+   q('#mapBtn').onclick=()=>{const u=new URL(location.href);u.search='';location.href=u.href;};}
   q('#arenaReplay').onclick=()=>{if(arenaLast)arenaSetup(arenaLast[0],arenaLast[1]);sndClick();};
   q('#arenaExit').onclick=()=>location.reload();
   /* Difficulty disclosure text, shared by the settings panel and the title screen so
@@ -8823,7 +8906,9 @@ function arenaSetup(comp0,comp1){
      if(mMap!=='land')u.searchParams.set('map',mMap);
      u.searchParams.set('diff',mDiff);
      if(mAi&&aiCivPickable(mDiff))u.searchParams.set('aiciv',mAi);
-     const sv=parseInt(q('#homeSeed').value,10);if(sv>0)u.searchParams.set('seed',sv);
+     let sv=parseInt(q('#homeSeed').value,10);
+     if(mMap==='gen'&&!(sv>0))sv=(Math.random()*2e9)|0||1;             
+     if(sv>0)u.searchParams.set('seed',sv);
      location.href=u.href;};
    hPaint();}
   
@@ -9336,8 +9421,9 @@ window.dbg={step,issueTagOrder,issueGarrison,ejectAll,exitGar,queueUnit,tags,
   bodyR:(o)=>bodyR(o),separation,breakAmbush,
   addFish:(tx,ty,amt=120)=>{const n={type:'food',sea:true,x:(tx+0.5)*TILE,y:(ty+0.5)*TILE,amt,max:amt};nodes.push(n);return n;}, 
   paintNavalTerrain,addNavalNodes,NAVAL_MAP:()=>NAVAL_MAP, 
-  MAP_ID:()=>MAP_ID,MAP_DEF:()=>MAP_DEF,MAP_IDS:()=>Object.keys(MAP_DEFS),mirTx, 
-  MAP_GEN:()=>Object.fromEntries(Object.entries(MAP_DEFS).map(([k,d])=>[k,{paint:d.paint,nodes:d.nodes,ptc:d.ptc,tw:d.tw,th:d.th}])), 
+  MAP_ID:()=>MAP_ID,MAP_DEF:()=>MAP_DEF,MAP_IDS:()=>Object.keys(MAP_DEFS),mirTx,mirTy, 
+  MAP_GEN:()=>Object.fromEntries(Object.entries(MAP_DEFS).map(([k,d])=>[k,{paint:d.paint,nodes:d.nodes,ptc:d.ptc,tw:d.tw,th:d.th,sym:d.sym}])), 
+  genMapPlan,applyGenTerrain,applyGenNodes,GEN_PLAN:()=>GEN_PLAN,GEN_SEED:()=>GEN_SEED, 
   fishDropoff,nearestFish,fishTick,
   boardTransport,unloadTransport,transUsed,transHold,canBoard,transTick, 
   trainSettler,spawnSettler,deploySettler,SETTLER_CAP, 

@@ -4,6 +4,7 @@
   "<button id=\"dbgBtn\" type=\"button\" title=\"除錯：座標/路徑/移動log\">🐞 除錯</button>": "<button id=\"dbgBtn\" type=\"button\" title=\"Debug: coordinates, paths, movement log\">🐞 Debug</button>",
   "<button id=\"arenaBtn\" type=\"button\" title=\"擂台：測試對戰（平地·無經濟）\">⚔️ 擂台</button>": "<button id=\"arenaBtn\" type=\"button\" title=\"Arena: test battles on flat ground, no economy\">⚔️ Arena</button>",
   "<button id=\"mapBtn\" type=\"button\" title=\"切換地圖：陸戰圖 / 水域圖（重載）\">🌊 水域圖</button>": "<button id=\"mapBtn\" type=\"button\" title=\"Switch map (reloads)\">🌊 Map</button>",
+  "<button id=\"mapBtn\" type=\"button\" title=\"回首頁重新選地圖／對手／種子（重開新局）\">🗺 換地圖</button>": "<button id=\"mapBtn\" type=\"button\" title=\"Back to the menu to re-pick map, opponent or seed (starts a new game)\">🗺 Change map</button>",
   "<button id=\"diffBtn\" type=\"button\" title=\"對手難度/文明＋AI 對戰觀戰（重開新局生效）\">⚙️ 對手</button>": "<button id=\"diffBtn\" type=\"button\" title=\"Opponent difficulty and civilisation, plus AI-vs-AI spectating (starts a new game)\">⚙️ Opponent</button>",
   "<button id=\"saveBtn\" type=\"button\" title=\"存檔／讀檔（存在這台裝置·可匯出成檔案）\">💾 存讀檔</button>": "<button id=\"saveBtn\" type=\"button\" title=\"Save / load (kept on this device, exportable to a file)\">💾 Save</button>",
   "<button id=\"toolsBtn\" type=\"button\" title=\"除錯工具（除錯／擂台／地圖）\">🔧</button>": "<button id=\"toolsBtn\" type=\"button\" title=\"Tools: map, opponent, save\">🔧</button>",
