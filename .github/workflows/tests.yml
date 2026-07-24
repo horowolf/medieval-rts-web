@@ -17,24 +17,29 @@ jobs:
         with:
           node-version: '24'
 
-      # ubuntu-latest ships Google Chrome; fail loudly rather than silently
-      # falling back to a different engine, since the suite asserts on layout
-      # in a few places.
+      # ubuntu-latest ships Google Chrome, but the binary name/path drifts with
+      # the runner image (google-chrome vs google-chrome-stable). Resolve the
+      # real path once and reuse it, rather than hard-coding /usr/bin/google-chrome
+      # (which a 2026 image update removed, breaking the build here).
       - name: Locate Chrome
+        id: chrome
         run: |
-          which google-chrome || which google-chrome-stable
-          google-chrome --version || google-chrome-stable --version
+          BIN="$(command -v google-chrome || command -v google-chrome-stable)"
+          if [ -z "$BIN" ]; then echo "No Chrome binary found"; exit 1; fi
+          ls -la /usr/bin/google-chrome* || true
+          echo "Using $BIN"; "$BIN" --version
+          echo "bin=$BIN" >> "$GITHUB_OUTPUT"
 
       # The two published builds must simulate identically: this is what proves
       # translating the interface did not touch the game.
       - name: Builds are the same game
         env:
-          CHROME: /usr/bin/google-chrome
+          CHROME: ${{ steps.chrome.outputs.bin }}
           CHROME_ARGS: --no-sandbox
         run: node tools/verify-builds.mjs
 
       - name: Regression suite
         env:
-          CHROME: /usr/bin/google-chrome
+          CHROME: ${{ steps.chrome.outputs.bin }}
           CHROME_ARGS: --no-sandbox
         run: node tests/headless-test.mjs
