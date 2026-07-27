@@ -147,5 +147,8 @@
   ") 格(": ") tile(",
   "（無事件）": "(no events)",
   "▶ 續跑": "▶ Resume",
-  "⏸ 暫停": "⏸ Pause"
+  "⏸ 暫停": "⏸ Pause",
+  "大型運輸艦": "Great Transport",
+  "運輸艦載運量 10 → 15（一次投送一個完整登陸梯隊）": "Transport capacity 10 → 15 (a full landing wave in one trip)",
+  "斥候可在岸邊棄馬取艇下水（水上：移速 102·視野 6·不能戰鬥·轉換 2 秒）": "Scouts can leave the horse for a skiff at any shore (at sea: speed 102, sight 6, no combat, 2s to switch)"
 }

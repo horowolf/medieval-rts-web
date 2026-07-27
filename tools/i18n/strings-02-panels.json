@@ -150,5 +150,15 @@
   "斥候統御": "Outriders",
   "斥候上限 +1、斥候視野 +1": "Scout cap +1, scout sight +1",
   "烽火": "Beacons",
-  "建築視野 +2、殘影保留 ×2、敵開火暴露延長（偵察線）": "Building sight +2, remembered enemies linger twice as long, and firing exposes the enemy for longer"
+  "建築視野 +2、殘影保留 ×2、敵開火暴露延長（偵察線）": "Building sight +2, remembered enemies linger twice as long, and firing exposes the enemy for longer",
+  "🚢 全選畫面內運輸艦": "🚢 Select all transports on screen",
+  "📍 指定目的地 {n}": "📍 Set destination {n}",
+  "已選取 {n} 艘運輸艦（畫面內）": "{n} transport(s) selected (on screen)",
+  "畫面內沒有其他運輸艦": "No other transports on screen",
+  "點地圖指定 {n} 艘運輸艦的目的地（可先用小地圖把畫面移過去）": "Tap the map to set the destination for {n} transport(s) — pan with the minimap first if needed",
+  "{n} 艘運輸艦前往目的地": "{n} transport(s) heading to the destination",
+  "那裡不是船到得了的水域": "Ships cannot reach that water",
+  "🍖 缺糧降效中：移速 −25%（原 {s}）、攻速 −25%（冷卻 {cd}s）、軍事生產暫停": "🍖 Starving: speed −25% (was {s}), attack speed −25% (cooldown {cd}s), military production paused",
+  "🔭 斥候過不了水域——碼頭研發「偵察快艇」後才能下水": "🔭 Scouts cannot cross water — research Scout Skiff at the dock first",
+  "🔭 斥候到不了那裡": "🔭 The scout cannot reach that spot"
 }

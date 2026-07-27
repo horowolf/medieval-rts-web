@@ -321,6 +321,7 @@
   <h1>⚔️ 中世紀 RTS</h1>
   <div class="homeSub">想得好的人贏過點得快的人</div>
   <div class="homeLb">地圖</div><div class="rowBtns" id="homeMapRow"></div>
+  <div class="homeLb hidden" id="homeGenLb">水域版型（🎲 隨機生成專用·選了會自動找到符合的種子）</div><div class="rowBtns hidden" id="homeGenRow"></div>
   <div class="homeLb">對手難度</div><div class="rowBtns" id="homeDiffRow"></div>
   <div class="homeLb">敵方文明</div><div class="rowBtns" id="homeAiCivRow"></div>
   <div class="homeLb">隨機種子（空白＝預設局·同種子＝同一場開局抽籤）</div>
@@ -393,7 +394,7 @@ const STR={
   r_wood:'木',r_stone:'石',r_iron:'鐵',r_gold:'金',r_food:'食',
   u_spear:'槍兵',uc_spear:'槍',u_archer:'弓兵',uc_archer:'弓',
   u_cavalry:'騎兵',uc_cavalry:'騎',u_catapult:'投石',uc_catapult:'砲',
-  u_medic:'醫護',uc_medic:'醫',u_scout:'斥候',uc_scout:'斥',
+  u_medic:'醫護',uc_medic:'醫',u_scout:'斥候',uc_scout:'斥',u_scoutSea:'偵察快艇',uc_scoutSea:'艇',
   u_longbow:'長弓兵',uc_longbow:'長弓',u_heavyinf:'重步兵',uc_heavyinf:'重步',u_horsearcher:'弓騎兵',uc_horsearcher:'弓騎',
   u_fishing:'漁船',uc_fishing:'漁',u_transport:'運輸艦',uc_transport:'運', 
   u_settler:'開拓隊',uc_settler:'拓', 
@@ -445,6 +446,11 @@ const STR={
   ui_deploySettler:'🏗️ 部署成開拓中心',
   ui_transLoad:'⬇️ 載入附近陸軍',ui_transUnload:'⚓ 卸載靠岸',
   msg_loaded:'運輸艦載入 {n} 單位',msg_loadNone:'附近無可載陸軍（開拓隊/陸軍·需在範圍內·容量足）',msg_unloadDone:'運輸艦靠岸卸載中',
+  
+  ui_shipPick:'🚢 全選畫面內運輸艦',ui_shipDest:'📍 指定目的地 {n}',
+  msg_shipPick:'已選取 {n} 艘運輸艦（畫面內）',msg_shipPickNone:'畫面內沒有其他運輸艦',
+  ui_shipDestHint:'點地圖指定 {n} 艘運輸艦的目的地（可先用小地圖把畫面移過去）',
+  msg_shipDestGo:'{n} 艘運輸艦前往目的地',msg_shipDestNo:'那裡不是船到得了的水域',
   ui_mkTitle:'市場（匯率隨交易浮動，大量交易自損）',
   ui_mkSell:'賣100{r} +{g}金',
   ui_mkBuy:'買100{r} −{g}金',
@@ -480,6 +486,7 @@ const STR={
   ui_specSite:'施工中　{p}%',
   ui_uStatA:'攻 {a} {t}　近防 {m}　遠防 {p}', 
   ui_uStatB:'{r}　移速 {s}　視野 {v}', 
+  ui_uStarve:'🍖 缺糧降效中：移速 −25%（原 {s}）、攻速 −25%（冷卻 {cd}s）、軍事生產暫停', 
   ui_uStatC:'軍糧 {u}／秒{ud}　相剋 {b}',
   ui_uMedic:'治療兵（自動治療傷者·不攻擊）',
   ui_atkMelee:'近戰',ui_atkRanged:'遠程',ui_rngRanged:'射程 {r}',ui_rngHeal:'治療 {r}',
@@ -558,6 +565,8 @@ const STR={
   msg_garFull:'進駐容量不足，部分單位留在外面',
   msg_eject:'建築危急，進駐單位緊急撒出！',
   msg_expDone:'地圖已全部探索',
+  msg_scoutNeedBoat:'🔭 斥候過不了水域——碼頭研發「偵察快艇」後才能下水',
+  msg_scoutNoWay:'🔭 斥候到不了那裡',
   msg_starveOn:'⚠️ 缺糧懲罰生效！軍隊效率 −25%',
   msg_starveWarn:'⚠️ 軍糧耗盡！警告 {n}/3（第 3 次起軍隊降效）',
   msg_starveOff:'糧食恢復，軍隊效率回復',
@@ -573,39 +582,234 @@ function fmt(s,o){return s.replace(/\{(\w+)\}/g,(m,k)=>o[k]);}
 
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function genMapPlan(mseed){
-  const GTW=128,GTH=72,gr=mulberry32((mseed|0)||1);
-  const rint=(a,b)=>a+((gr()*(b-a+1))|0);
-  const sym=gr()<0.5?'mir':'pt';
-  const px=rint(16,22);
-  const py=sym==='mir'?rint(30,42):rint(15,27);          
-  const theme=['open','open','wood'][(gr()*3)|0];         
-  const cxT=px+1,cyT=py+1;                                
-  const clampX=x=>Math.max(3,Math.min(60,x));            
-  const clampY=y=>Math.max(4,Math.min(GTH-5,y));
-  const terr=[],nodeOps=[];
+  const GTW=128,GTH=72,base=(mseed|0)||1,ATT=64;
   
-  const ring=['wood','food','food','gold','stone','iron'];
-  for(let i=ring.length-1;i>0;i--){const j=(gr()*(i+1))|0;const s=ring[i];ring[i]=ring[j];ring[j]=s;}
-  const NR=ring.length;
-  ring.forEach((tp,i)=>{
-    const ang=(i/NR)*Math.PI*2+(gr()-0.5)*0.6, r=7+gr()*4;
-    const tx=clampX(Math.round(cxT+Math.cos(ang)*r)), ty=clampY(Math.round(cyT+Math.sin(ang)*r));
-    if(tp==='wood')for(let k=0;k<3;k++)nodeOps.push(['wood',tx,clampY(ty+k),400]); 
-    else nodeOps.push([tp,tx,ty,rint(520,620)]);
-  });
-  
-  const exN=rint(3,4);
-  for(let i=0;i<exN;i++)nodeOps.push([['gold','stone','iron','food'][i%4],clampX(rint(40,58)),clampY(rint(10,GTH-11)),rint(760,840)]);
-  nodeOps.push([['gold','stone','iron'][(gr()*3)|0],clampX(rint(56,61)),clampY(rint(24,GTH-25)),700]);
-  
-  const fN=theme==='wood'?rint(3,4):rint(1,2);
-  for(let i=0;i<fN;i++){
-    const w=rint(2,4),h=rint(2,4),x0=clampX(rint(24,54)),y0=clampY(rint(8,GTH-9));
-    const x1=Math.min(61,x0+w),y1=Math.min(GTH-4,y0+h);
-    const outside=x0>cxT+12||x1<cxT-12||y0>cyT+12||y1<cyT-12; 
-    if(outside)terr.push([x0,y0,x1,y1,3]); // 3=T_FOREST
+  const lh=c=>c===1?1:c===2?0.5:0;                          
+  for(let attempt=0;attempt<ATT;attempt++){
+    const allowHigh=attempt<ATT-1;                          
+    const gr=mulberry32(((base^Math.imul(attempt,0x9E3779B1))>>>0)||1);
+    const rint=(a,b)=>a+((gr()*(b-a+1))|0);
+    const sym=gr()<0.5?'mir':'pt';
+    const px=rint(16,22);
+    const py=sym==='mir'?rint(30,42):rint(15,27);          
+    const theme=['open','open','wood'][(gr()*3)|0];         
+    const cxT=px+1,cyT=py+1;                                
+    const clampX=x=>Math.max(3,Math.min(60,x));            
+    const clampY=y=>Math.max(4,Math.min(GTH-5,y));
+    const terr=[],nodeOps=[],ringT=[];                      
+    
+    const ring=['wood','food','food','gold','stone','iron'];
+    for(let i=ring.length-1;i>0;i--){const j=(gr()*(i+1))|0;const s=ring[i];ring[i]=ring[j];ring[j]=s;}
+    const NR=ring.length,CLU3=[[0,0],[2,1],[-1,2]];   
+    const RINGW=5,CLR=12+RINGW;                       
+    ring.forEach((tp,i)=>{
+      const ang=(i/NR)*Math.PI*2+(gr()-0.5)*0.6, r=7+gr()*4;
+      const tx=clampX(Math.round(cxT+Math.cos(ang)*r)), ty=clampY(Math.round(cyT+Math.sin(ang)*r));
+      if(tp==='wood')for(let L=0;L<3;L++)for(let k=0;k<3;k++)nodeOps.push(['wood',clampX(tx+L*2),clampY(ty+k),400]); 
+      else for(const [dx,dy] of CLU3)nodeOps.push([tp,clampX(tx+dx),clampY(ty+dy),rint(520,620)]);
+      ringT.push([tp,tx,ty]);
+    });
+    
+    const exN=rint(4,5),exPts=[];   
+    for(let i=0;i<exN;i++){
+      const tp=['gold','stone','iron','food','gold'][i%5],ex=clampX(rint(40,58)),ey=clampY(rint(10,GTH-11)),amt=rint(760,840);
+      for(const [dx,dy] of CLU3)nodeOps.push([tp,clampX(ex+dx),clampY(ey+dy),amt]);
+      exPts.push([ex,ey]);
+    }
+    {const tp=['gold','stone','iron'][(gr()*3)|0],cx0=clampX(rint(56,61)),cy0=clampY(rint(24,GTH-25));
+     for(const [dx,dy] of CLU3)nodeOps.push([tp,clampX(cx0+dx),clampY(cy0+dy),700]);
+     exPts.push([cx0,cy0]);}
+    
+    const fN=theme==='wood'?rint(5,6):rint(3,4);
+    for(let i=0;i<fN;i++){
+      const w=rint(5,7),h=rint(5,7),x0=clampX(rint(24,54)),y0=clampY(rint(8,GTH-9));
+      const x1=Math.min(61,x0+w),y1=Math.min(GTH-4,y0+h);
+      const outside=x0>cxT+CLR||x1<cxT-CLR||y0>cyT+CLR||y1<cyT-CLR; 
+      if(outside)terr.push([x0,y0,x1,y1,3]);
+    }
+    
+    
+    
+    const highs=[];
+    if(allowHigh){
+      const hiN=[0,0,1,1,2][rint(0,4)];                     
+      for(let i=0;i<hiN;i++){
+        const w=rint(4,8),h=rint(4,7),x0=clampX(rint(26,52)),y0=clampY(rint(9,GTH-10));
+        const x1=Math.min(60,x0+w),y1=Math.min(GTH-5,y0+h);
+        if(!(x0>cxT+CLR||x1<cxT-CLR||y0>cyT+CLR||y1<cyT-CLR))continue; 
+        terr.push([x0,y0,x1,y1,1]); highs.push([x0,y0,x1,y1]);
+      }
+      for(const [x0,y0,x1,y1] of highs){                   
+        if(gr()<0.55&&y0-1>=2){const a=clampX(rint(x0,x1-1));terr.push([a,y0-1,Math.min(x1,a+1),y0-1,2]);}       
+        if(gr()<0.55&&y1+1<=GTH-3){const a=clampX(rint(x0,x1-1));terr.push([a,y1+1,Math.min(x1,a+1),y1+1,2]);}    
+        if(gr()<0.55&&x0-1>=2){const a=clampY(rint(y0,y1-1));terr.push([x0-1,a,x0-1,Math.min(y1,a+1),2]);}        
+        if(gr()<0.55&&x1+1<=GTW/2-2){const a=clampY(rint(y0,y1-1));terr.push([x1+1,a,x1+1,Math.min(y1,a+1),2]);}  
+      }
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    const water=allowHigh?['none','none','lake','strait','arch'][rint(0,4)]:'none';
+    const fishOps=[],isles=[];                     
+    const F=(x,y)=>fishOps.push([x,y,450]);        
+    if(water==='lake'){
+      
+      const hw=rint(5,7),hh=rint(4,6);
+      const hx0=clampX(cxT+13+rint(0,4)),hy0=clampY(cyT-((hh/2)|0)+rint(-2,2));
+      const hx1=hx0+hw,hy1=hy0+hh;
+      terr.push([hx0,hy0,hx1,hy1,5]); F(hx0+2,hy0+2); F(hx0+3,hy1-2);
+      if(gr()<0.5){ 
+        const k=rint(3,5),cw=rint(5,9),cy0=36-k,cy1=35+k;  
+        terr.push([63-cw,cy0,63,cy1,5]); F(63-cw+2,cy0+2); F(63-cw+2,cy1-2);
+      }
+      if(gr()<0.5){ 
+        const w=rint(4,6),h=rint(4,5),x0=clampX(rint(30,52)),y0=clampY(rint(10,GTH-11));
+        const x1=Math.min(60,x0+w),y1=Math.min(GTH-6,y0+h);
+        const clearTC=x0>cxT+12||x1<cxT-12||y0>cyT+12||y1<cyT-12, clearHome=x0>hx1+1||x1<hx0-1||y0>hy1+1||y1<hy0-1;
+        if(clearTC&&clearHome&&x1-x0>=4&&y1-y0>=4){terr.push([x0,y0,x1,y1,5]);F(x0+2,y0+2);}
+      }
+    }else if(water==='strait'){
+      const bw=rint(2,4),xw=63-bw;                 
+      const full=gr()<0.55,gap=full?0:rint(4,10);  
+      terr.push([xw,gap,63,GTH-1-gap,5]);           
+      if(full&&gr()<0.5){const yf=(GTH/2)|0;terr.push([xw,yf,63,yf,6]);} 
+      F(xw+2,gap+3); F(xw+2,GTH-1-gap-3);          
+    }else if(water==='arch'){
+      
+      const fors=terr.filter(r=>r[4]===3);         
+      terr.length=0;
+      terr.push([0,0,63,GTH-1,5]);                 
+      const isle=(x0,y0,x1,y1)=>{const a=Math.max(2,x0),b=Math.max(2,y0),c=Math.min(63,x1),d=Math.min(GTH-3,y1);
+        if(c-a>=3&&d-b>=3){terr.push([a,b,c,d,0]);isles.push([a,b,c,d]);}};
+      
+      const hx0=cxT-16,hy0=cyT-15,hx1=cxT+16,hy1=cyT+15;
+      isle(hx0,hy0,hx1,hy1);
+      
+      for(const [ex,ey] of exPts){
+        isle(ex-rint(4,6),ey-1,ex+rint(5,7),ey+rint(3,5));
+        isle(ex-rint(1,2),ey-rint(3,5),ex+rint(3,4),ey+rint(5,7));
+      }
+      for(const [x0,y0,x1,y1] of fors){            
+        const X0=Math.max(x0,hx0+1),Y0=Math.max(y0,hy0+1),X1=Math.min(x1,hx1-1),Y1=Math.min(y1,hy1-1);
+        if(X1-X0>=1&&Y1-Y0>=1)terr.push([X0,Y0,X1,Y1,3]);
+      }
+      for(const [sx,sy] of [[hx0,hy0],[hx1-2,hy0],[hx0,hy1-2],[hx1-2,hy1-2]])   
+        if(gr()<0.55)terr.push([sx,sy,sx+2,sy+2,5]);
+      
+      const offIsle=(x,y)=>!isles.some(([a,b,c,d])=>x>=a-2&&x<=c+2&&y>=b-2&&y<=d+2);
+      for(const [fx,fy] of [[Math.min(60,cxT),hy1+3],[Math.min(60,cxT),hy0-3]])
+        if(fy>=2&&fy<=GTH-3&&offIsle(fx,fy)){F(fx,fy);break;}
+      for(let t=0,put=0;t<16&&put<2;t++){const fx=rint(38,62),fy=rint(3,GTH-4);if(offIsle(fx,fy)){F(fx,fy);put++;}}
+    }
+    
+    
+    
+    
+    const g=new Int8Array(GTW*GTH);
+    const paint=(x0,y0,x1,y1,tp)=>{for(let y=Math.max(0,y0);y<=Math.min(GTH-1,y1);y++)for(let x=Math.max(0,x0);x<=Math.min(GTW-1,x1);x++)g[y*GTW+x]=tp;};
+    for(const [x0,y0,x1,y1,tp] of terr){paint(x0,y0,x1,y1,tp);   
+      if(sym==='pt')paint(GTW-1-x1,GTH-1-y1,GTW-1-x0,GTH-1-y0,tp);
+      else paint(GTW-1-x1,y0,GTW-1-x0,y1,tp);}
+    const landW=c=>c!==5, navW=c=>c===5||c===6;   
+    const DXY=[[1,0],[-1,0],[0,1],[0,-1]];
+    const landFlood=(sx,sy)=>{const seen=new Uint8Array(GTW*GTH),s=sy*GTW+sx;if(!landW(g[s]))return seen;
+      seen[s]=1;const st=[s];while(st.length){const cur=st.pop(),cx=cur%GTW,cy=(cur/GTW)|0,hc=lh(g[cur]);
+        for(const [dx,dy] of DXY){const nx=cx+dx,ny=cy+dy;if(nx<0||ny<0||nx>=GTW||ny>=GTH)continue;
+          const ni=ny*GTW+nx;if(seen[ni]||!landW(g[ni]))continue;if(Math.abs(lh(g[ni])-hc)>0.5)continue;seen[ni]=1;st.push(ni);}}return seen;};
+    const s0=[px-1,py],m0=sym==='pt'?[GTW-1-s0[0],GTH-1-s0[1]]:[GTW-1-s0[0],s0[1]]; 
+    const seenL=landFlood(s0[0],s0[1]),seenL1=landFlood(m0[0],m0[1]);
+    let wc=null;                                  
+    if(water!=='none'){
+      wc=new Int32Array(GTW*GTH).fill(-1);let wn=0;
+      for(let i=0;i<GTW*GTH;i++){if(!navW(g[i])||wc[i]>=0)continue;wc[i]=wn;const st=[i];
+        while(st.length){const cur=st.pop(),cx=cur%GTW,cy=(cur/GTW)|0;
+          for(const [dx,dy] of DXY){const nx=cx+dx,ny=cy+dy;if(nx<0||ny<0||nx>=GTW||ny>=GTH)continue;
+            const ni=ny*GTW+nx;if(wc[ni]>=0||!navW(g[ni]))continue;wc[ni]=wn;st.push(ni);}}wn++;}
+    }
+    let conn=seenL[m0[1]*GTW+m0[0]]===1;          
+    if(!conn&&wc){                                
+      const shores=seen=>{const set=new Set();for(let i=0;i<GTW*GTH;i++){if(!seen[i])continue;const cx=i%GTW,cy=(i/GTW)|0;
+        for(const [dx,dy] of DXY){const nx=cx+dx,ny=cy+dy;if(nx<0||ny<0||nx>=GTW||ny>=GTH)continue;
+          const ni=ny*GTW+nx;if(wc[ni]>=0)set.add(wc[ni]);}}return set;};
+      const w0=shores(seenL),w1=shores(seenL1);for(const w of w0)if(w1.has(w)){conn=true;break;}
+    }
+    const reach=(x,y)=>x>=0&&y>=0&&x<GTW&&y<GTH&&seenL[y*GTW+x]===1;
+    const okRes=['wood','food','gold','stone','iron'].every(tp=>ringT.some(([t,tx,ty])=>t===tp&&reach(tx,ty)));
+    if(!(conn&&okRes))continue;
+    
+    
+    
+    let dockD=-1,archN=0;                          
+    if(water!=='none'){
+      const fishC=new Set(),fishI=new Set();
+      for(const [fx,fy] of fishOps)for(const [x,y] of [[fx,fy],sym==='pt'?[GTW-1-fx,GTH-1-fy]:[GTW-1-fx,fy]]){
+        const i=y*GTW+x;fishI.add(i);if(g[i]===5&&wc[i]>=0)fishC.add(wc[i]);}
+      let bd=1e9;
+      for(let ty=0;ty<GTH-1;ty++)for(let tx=0;tx<GTW-1;tx++){
+        const i=ty*GTW+tx;
+        if(g[i]!==5||g[i+1]!==5||g[i+GTW]!==5||g[i+GTW+1]!==5||!fishC.has(wc[i]))continue;
+        if(fishI.has(i)||fishI.has(i+1)||fishI.has(i+GTW)||fishI.has(i+GTW+1))continue; 
+        let land=false;
+        for(let y=ty;y<ty+2&&!land;y++)for(let x=tx;x<tx+2&&!land;x++)
+          for(const [dx,dy] of DXY){const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=GTW||ny>=GTH)continue;
+            const ni=ny*GTW+nx;if((g[ni]===0||g[ni]===1)&&seenL[ni]===1){land=true;break;}}
+        if(!land)continue;
+        const d=Math.max(Math.abs(tx-cxT),Math.abs(ty-cyT));if(d<bd)bd=d;
+      }
+      if(bd>1e8)continue;                          
+      if((water==='lake'||water==='arch')&&bd>24)continue; 
+      dockD=bd;
+      
+      if(water==='arch'){
+        
+        const D8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+        const lc=new Int32Array(GTW*GTH).fill(-1),lsz=[];let ln=0;
+        for(let i0=0;i0<GTW*GTH;i0++){if(!landW(g[i0])||lc[i0]>=0)continue;lc[i0]=ln;let n=0;const st=[i0];
+          while(st.length){const cur=st.pop(),cx=cur%GTW,cy=(cur/GTW)|0,hc=lh(g[cur]);n++;
+            for(const [dx,dy] of D8){const nx=cx+dx,ny=cy+dy;if(nx<0||ny<0||nx>=GTW||ny>=GTH)continue;
+              const ni=ny*GTW+nx;if(lc[ni]>=0||!landW(g[ni]))continue;if(Math.abs(lh(g[ni])-hc)>0.5)continue;lc[ni]=ln;st.push(ni);}}
+          lsz.push(n);ln++;}
+        const dockC=new Set();                     
+        for(let ty=0;ty<GTH-1;ty++)for(let tx=0;tx<GTW-1;tx++){
+          const i=ty*GTW+tx;
+          if(g[i]!==5||g[i+1]!==5||g[i+GTW]!==5||g[i+GTW+1]!==5||!fishC.has(wc[i]))continue;
+          if(fishI.has(i)||fishI.has(i+1)||fishI.has(i+GTW)||fishI.has(i+GTW+1))continue;
+          for(let y=ty;y<ty+2;y++)for(let x=tx;x<tx+2;x++)
+            for(const [dx,dy] of DXY){const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=GTW||ny>=GTH)continue;
+              const ni=ny*GTW+nx;if(g[ni]===0||g[ni]===1)dockC.add(lc[ni]);}
+        }
+        const resC=new Set();let stray=0;
+        for(const [,tx,ty] of nodeOps)for(const [x,y] of [[tx,ty],sym==='pt'?[GTW-1-tx,GTH-1-ty]:[GTW-1-tx,ty]]){
+          const i=y*GTW+x;if(!landW(g[i]))stray++;else resC.add(lc[i]);}
+        if(stray)continue;                         // ①
+        const homeC=lc[s0[1]*GTW+s0[0]],homeC1=lc[m0[1]*GTW+m0[0]];
+        let ok=true,uninh=0;
+        for(const c of resC){if(lsz[c]<40||!dockC.has(c)){ok=false;break;}if(c!==homeC&&c!==homeC1)uninh++;}
+        if(!ok||uninh<3)continue;                  // ②③
+        archN=uninh;
+      }
+    }
+    return {sym,ptc:[px,py],theme,terr,nodeOps,fishOps,water,dockD,isles,archN,mseed:base};
   }
-  return {sym,ptc:[px,py],theme,terr,nodeOps,mseed:(mseed|0)||1};
+  
+  return {sym:'mir',ptc:[18,34],theme:'open',terr:[],fishOps:[],water:'none',dockD:-1,isles:[],archN:0,nodeOps:[['wood',12,34,400],['food',26,30,560],['gold',24,40,560],['stone',14,28,560],['iron',14,40,560]],mseed:base};
+}
+
+function genSeedFor(water,from){
+  let s=(from|0)>0?(from|0):1;
+  for(let i=0;i<400;i++,s++){if(genMapPlan(s).water===water)return s;}
+  return (from|0)>0?(from|0):1;
 }
 function applyGenTerrain(plan){ 
   for(const [x0,y0,x1,y1,tp] of plan.terr){
@@ -616,17 +820,31 @@ function applyGenTerrain(plan){
 }
 function applyGenNodes(plan){
   const P=(tx,ty)=>[(tx+0.5)*TILE,(ty+0.5)*TILE];
-  const snap=(tx,ty)=>{ 
-    if(terr[idx(tx,ty)]!==T_FOREST)return[tx,ty];
-    for(let r=1;r<=3;r++)for(const [dx,dy] of [[r,0],[-r,0],[0,r],[0,-r],[r,r],[-r,-r],[r,-r],[-r,r]]){
-      const nx=tx+dx,ny=ty+dy;if(nx>=2&&ny>=2&&nx<TW-1&&ny<TH-1&&terr[idx(nx,ny)]!==T_FOREST)return[nx,ny];}
+  const bad=i=>terr[i]===T_FOREST||terr[i]===T_WATER; 
+  const snap=(tx,ty)=>{
+    if(!bad(idx(tx,ty)))return[tx,ty];
+    for(let r=1;r<=4;r++)for(const [dx,dy] of [[r,0],[-r,0],[0,r],[0,-r],[r,r],[-r,-r],[r,-r],[-r,r]]){
+      const nx=tx+dx,ny=ty+dy;if(nx>=2&&ny>=2&&nx<TW-1&&ny<TH-1&&!bad(idx(nx,ny)))return[nx,ny];}
+    return[tx,ty];
+  };
+  
+  const snapW=(tx,ty)=>{
+    if(terr[idx(tx,ty)]!==T_WATER)return[tx,ty];
+    for(let r=1;r<=4;r++)for(const [dx,dy] of [[r,0],[-r,0],[0,r],[0,-r],[r,r],[-r,-r],[r,-r],[-r,r]]){
+      const nx=tx+dx,ny=ty+dy;if(nx>=2&&ny>=2&&nx<TW-1&&ny<TH-1&&terr[idx(nx,ny)]!==T_WATER)return[nx,ny];}
     return[tx,ty];
   };
   for(const [type,tx,ty,amt] of plan.nodeOps){
-    const [ax,ay]=type==='wood'?[tx,ty]:snap(tx,ty);
+    const [ax,ay]=type==='wood'?snapW(tx,ty):snap(tx,ty);
     addN(type,[[...P(ax,ay),amt]]);
     if(plan.sym==='pt')addN(type,[[...P(TW-1-ax,TH-1-ay),amt]]);
     else addN(type,[[...P(TW-1-ax,ay),amt]]);
+  }
+  
+  for(const [tx,ty,amt] of plan.fishOps||[]){
+    const put=(x,y)=>{if(terr[idx(x,y)]===T_WATER)nodes.push({type:'food',sea:true,x:(x+0.5)*TILE,y:(y+0.5)*TILE,amt,max:amt});};
+    put(tx,ty);
+    if(plan.sym==='pt')put(TW-1-tx,TH-1-ty); else put(TW-1-tx,ty);
   }
 }
 const GEN_SEED=(()=>{const s=new URLSearchParams(location.search).get('seed'),n=parseInt(s,10);return(s&&n>0)?n:20260723;})();
@@ -655,12 +873,13 @@ const MAP_DEFS={
             desc:'無高地、只有零星林·資源豐厚分散＝經濟營運與擴張驗證（平衡輪第②層）'},
   highland:{nm:'地形圖',   ic:'⛰️', tw:128,th:72, paint:()=>paintHighlandTerrain(), nodes:()=>addHighlandNodes(), ptc:[18,34], routes:'ns',
             desc:'高地/坡道/林隘口密集·中央高地控制點＝地形與視野戰驗證（平衡輪第③層）'},
-  gen:     {nm:'隨機生成', ic:'🎲', tw:128,th:72, paint:()=>applyGenTerrain(GEN_PLAN),nodes:()=>applyGenNodes(GEN_PLAN),ptc:GEN_PLAN.ptc, sym:GEN_PLAN.sym, routes:'ns',
+  
+  gen:     {nm:'隨機生成', ic:'🎲', tw:128,th:72, paint:()=>applyGenTerrain(GEN_PLAN),nodes:()=>applyGenNodes(GEN_PLAN),ptc:GEN_PLAN.ptc, sym:GEN_PLAN.sym, routes:'ns', hasWater:GEN_PLAN.water!=='none',
             desc:'種子隨機生成的對稱地圖（每種資源都在起手附近·左右鏡射或點對稱＝公平）——首頁留空種子＝每次一張新圖；填種子＝可重現/分享/存檔的固定圖'},
 };
 const MAP_ID=(()=>{const m=new URLSearchParams(location.search).get('map');return MAP_DEFS[m]?m:'land';})();
 const MAP_DEF=MAP_DEFS[MAP_ID];
-const NAVAL_MAP=MAP_ID==='naval'; 
+const NAVAL_MAP=MAP_ID==='naval'||!!MAP_DEF.hasWater; 
 let aiEco=new URLSearchParams(location.search).get('noai')!=='1'; 
 let aiRoutesDirty=true; 
 const TILE=40,TW=MAP_DEF.tw,TH=MAP_DEF.th,W=TW*TILE,H=TH*TILE; 
@@ -713,23 +932,26 @@ const UT={
   horsearcher:{nm:STR.u_horsearcher,ch:STR.uc_horsearcher,hp:80,dmg:9,rng:118,cd:1.5,sp:100,vis:7,proj:340,acc:0.85,bld:'stable',br:9,role:'mobile',thW:.8,repl:'cavalry',ulk:'UM',mount:true,
             cost:{food:55,gold:45},bt:11,bonus:{spear:1.4,raid:2.5},pick:{villager:0.5,raid:0.9,tower:0.15,castle:0.15,tc:0.15},vol:2,bio:true,up:.16,aM:0,aP:0}, 
   
-  fishing:  {nm:STR.u_fishing,ch:STR.uc_fishing,hp:45, dmg:0,rng:0,cd:1.0,sp:75,vis:5,dom:'water',bld:'dock',br:9,
+  
+  fishing:  {nm:STR.u_fishing,ch:STR.uc_fishing,hp:45, dmg:0,rng:0,cd:1.0,sp:75,vis:5,dom:'water',bld:'dock',br:11,
             cost:{wood:50},bt:8, vol:1,bio:false,up:.02,aM:0,aP:0,fish:true}, 
-  transport:{nm:STR.u_transport,ch:STR.uc_transport,hp:120,dmg:0,rng:0,cd:1.0,sp:80,vis:6,dom:'water',bld:'dock',br:11,
-            cost:{wood:120},bt:14,vol:2,bio:false,up:.08,aM:1,aP:2,hold:6}, 
+  transport:{nm:STR.u_transport,ch:STR.uc_transport,hp:120,dmg:0,rng:0,cd:1.0,sp:80,vis:6,dom:'water',bld:'dock',br:14,
+            cost:{wood:120},bt:14,vol:2,bio:false,up:.08,aM:1,aP:2,hold:10}, 
   
   settler:  {nm:STR.u_settler,ch:STR.uc_settler,hp:55,dmg:0,rng:0,cd:1.0,sp:72,vis:6,br:9,
             cost:{food:80,wood:100},bt:14,vol:2,bio:true,up:.04,aM:0,aP:0,settler:true}, 
   
-  galley:   {nm:STR.u_galley,ch:STR.uc_galley,hp:95,dmg:8,rng:150,cd:1.2,sp:78,vis:8,proj:330,dom:'water',bld:'dock',br:10,role:'ranged',
+  galley:   {nm:STR.u_galley,ch:STR.uc_galley,hp:95,dmg:8,rng:150,cd:1.2,sp:78,vis:8,proj:330,dom:'water',bld:'dock',br:13,role:'ranged',
             cost:{wood:90,gold:30},bt:11,vol:2,bio:false,up:.10,aM:1,aP:1}, 
-  fireship: {nm:STR.u_fireship,ch:STR.uc_fireship,hp:55,dmg:18,rng:20,cd:1.4,sp:90,vis:7,dom:'water',bld:'dock',age:2,br:9,role:'anti',
+  fireship: {nm:STR.u_fireship,ch:STR.uc_fireship,hp:55,dmg:18,rng:20,cd:1.4,sp:90,vis:7,dom:'water',bld:'dock',age:2,br:12,role:'anti',
             cost:{wood:75,gold:20},bt:10,vol:2,bio:false,up:.10,aM:0,aP:0,bonus:{galley:1.6,transport:1.6}}, 
-  siegeship:{nm:STR.u_siegeship,ch:STR.uc_siegeship,hp:70,dmg:24,rng:240,minRng:45,cd:3.6,sp:50,vis:7,proj:170,splash:54,dom:'water',bld:'dock',age:2,br:12,role:'siege',
+  siegeship:{nm:STR.u_siegeship,ch:STR.uc_siegeship,hp:70,dmg:24,rng:240,minRng:45,cd:3.6,sp:50,vis:7,proj:170,splash:54,dom:'water',bld:'dock',age:2,br:15,role:'siege',
             cost:{wood:100,gold:60},bt:13,vol:3,bio:false,up:.12,aM:0,aP:2,bonus:{building:3}}, 
 };
 const PROD_BLD=new Set(Object.values(UT).map(u=>u.bld)); 
 const SCT={nm:STR.u_scout,ch:STR.uc_scout,hp:28,sp:130,vis:9,cost:{food:50,gold:20},bt:10,aM:0,aP:0}; 
+
+const SCT_SEA={sp:102,vis:6,morph:2}; 
 const VIL={ch:'👤',cost:{food:50},bt:8}; 
 
 const UPKEEP_MULT=2.5;
@@ -737,7 +959,8 @@ const VBOW={rng:110,dmg:2,cd:1.5};
 const ARROW_TURN=3.2; 
 const SPLASH_EDGE=0.4; 
 let SPLASH_FF=0.5; 
-const SCOUT_CAP=2; 
+
+const SCOUT_CAP=2+Math.max(0,Math.floor(Math.log2(TW*TH/1296)));
 const SETTLER_CAP=2; 
 const MED_HEAL_R=50,MED_SEEK_R=170; 
 /* cap = garrison capacity (in unit volume); rc/rT = repair cost basis and time.
@@ -850,6 +1073,9 @@ const TECH=[
   {id:'N3',cat:'navy',tier:2,kind:'val',   at:'dock',    star:false,req:['N1'],  nm:'強弩戰船',  eff:'戰船射程 +12%、箭速 +25%（固化戰船打帶跑定位）'},
   {id:'N4',cat:'navy',tier:2,kind:'fn',    at:'dock',    star:false,req:['N1'],  nm:'希臘火',    eff:'投石船對船傷害 +50%（強化投石船剋火船·RPS headroom）'},
   {id:'N5',cat:'navy',tier:3,kind:'val',   at:'dock',    star:false,req:['N2'],  nm:'樓船',      eff:'戰船 HP +25%、攻擊 +4（晚期戰力·重戰船）'},
+  {id:'N6',cat:'navy',tier:2,kind:'val',   at:'dock',    star:false,req:['N1'],  nm:'大型運輸艦',eff:'運輸艦載運量 10 → 15（一次投送一個完整登陸梯隊）'},
+  
+  {id:'N7',cat:'navy',tier:1,kind:'fn',    at:'dock',    star:false,             nm:'偵察快艇',  eff:'斥候可在岸邊棄馬取艇下水（水上：移速 102·視野 6·不能戰鬥·轉換 2 秒）'},
   {id:'NE',cat:'navy',tier:3,kind:'val',   at:'dock',    star:true, req:['N3'],  nm:'長弓戰船',  eff:'英格蘭獨有：戰船射程再 +18%（遠海壓制）'},
   {id:'NH',cat:'navy',tier:3,kind:'val',   at:'dock',    star:true, req:['N2'],  nm:'鐵甲艦',    eff:'神聖羅馬獨有：全船 近/遠防 +2（耐揍）'},
   {id:'NM',cat:'navy',tier:3,kind:'val',   at:'dock',    star:true, req:['N1'],  nm:'快火船',    eff:'蒙古獨有：火船移速 +18%（機動突擊）'},
@@ -924,14 +1150,14 @@ const AGES=[null,
 const BTIER={barracks:1,market:1,tower:1,stable:1,smith:1,monastery:2,castle:2}; 
 function buildingAge(type){return BTIER[type]||1;} 
 function buildingUnlocked(type,si){return techOf(si).age>=buildingAge(type);} 
-const WIRED=new Set(['E1','E2','E3','E4','E5','M1','M2','M3','M4','M5','M6','M7','M8','M9','P1','S1','S2','S3','F1','F2','F3','U1','U2','U3','UL','UH','UM','MR','N1','N2','N3','N4','N5','NE','NH','NM']); 
+const WIRED=new Set(['E1','E2','E3','E4','E5','M1','M2','M3','M4','M5','M6','M7','M8','M9','P1','S1','S2','S3','F1','F2','F3','U1','U2','U3','UL','UH','UM','MR','N1','N2','N3','N4','N5','N6','N7','NE','NH','NM']); 
 function techCost(tch){return [null,{wood:75,food:40},{wood:120,gold:60},{iron:80,gold:120}][tch.tier];}
 function techTime(tch){return [0,12,20,28][tch.tier];}
 let techMod={}; 
 function recomputeTechMod(si){ 
-  const m={meleeAtk:0,rangedAtk:0,meleeDef:0,rangedDef:0,siege:1,cavSpeed:1,gather:1,upkeep:1,scoutCap:0,farmRegen:1,counterDmg:1,kiteBuff:1,
+  const m={meleeAtk:0,rangedAtk:0,meleeDef:0,rangedDef:0,siege:1,cavSpeed:1,gather:1,upkeep:1,scoutCap:0,seaScout:0,farmRegen:1,counterDmg:1,kiteBuff:1,
     farmCap:0,carry:1,mineGather:1,ironRegen:0,mktHalf:false,repair:1,bldHp:1,garCap:1,garArrow:3,towerRng:0,bldVis:0,ghost:1,expose:1,forestPierce:0,horseAcc:0,pierce:1,
-    fishGather:1,shipHp:1,galleyHp:1,galleyDmg:0,galleyRng:1,galleyProj:1,siegeAntiShip:1,shipDef:0,fireSpeed:1,raidDmg:1}; 
+    fishGather:1,shipHp:1,galleyHp:1,galleyDmg:0,galleyRng:1,galleyProj:1,siegeAntiShip:1,shipDef:0,fireSpeed:1,transHold:0,raidDmg:1}; 
   const R=techOf(si).researched;
   if(R.has('E1'))m.gather*=1.15;
   if(R.has('E2')){m.farmRegen*=1.5;m.farmCap+=30;}                 
@@ -963,6 +1189,8 @@ function recomputeTechMod(si){
   if(R.has('NE'))m.galleyRng*=1.18;                               
   if(R.has('NH'))m.shipDef+=2;                                    
   if(R.has('NM'))m.fireSpeed*=1.18;                               
+  if(R.has('N7'))m.seaScout=1;                                    
+  if(R.has('N6'))m.transHold+=5;                                
   
   {const ch=S_(si).aiCheat;
    if(ch&&ch.gather!==1)m.gather*=ch.gather;
@@ -1142,7 +1370,7 @@ function computeLandComp(){
    Note this is not the same as the land/water flood fill used for island checks:
    that one ignores blocked tiles and height, so a pocket walled off by cliffs
    counts as connected there and must not be confused with reachability. */
-let pathCompL=null,pathCompW=null,pathCompDirty=true,pathCompT=-1e9;
+let pathCompL=null,pathCompW=null,pathCompDirty=true,pathCompT=-1e9,pathCompV=0; 
 const PC_MAXR=40;      
 function computePathComp(){
   const N=TW*TH,DX=[1,-1,0,0,1,1,-1,-1],DY=[0,0,1,-1,1,-1,1,-1];
@@ -1163,7 +1391,7 @@ function computePathComp(){
       c++;
     }
   }
-  pathCompDirty=false;pathCompT=t;
+  pathCompDirty=false;pathCompT=t;pathCompV++;
 }
 function ensurePathComp(){if(pathCompDirty||!pathCompL||t-pathCompT>=5)computePathComp();}
 /* Nearest tile of our own region to the target point -- not to the target's
@@ -1256,10 +1484,11 @@ function addN(type,arr){for(const [x,y,amt] of arr)nodes.push({type,x,y,amt,max:
 function addNavalNodes(){ 
   const cx=(TW/2)|0,y0=5,y1=TH-6,midY=((y0+y1)/2)|0,P=(tx,ty)=>[(tx+0.5)*TILE,(ty+0.5)*TILE];
   addMir({ 
-   food:[[...P(18,30),600],[...P(18,38),600],[...P(14,34),600],[...P(30,22),700],[...P(30,46),700]],
-   gold:[[...P(16,26),600],[...P(16,42),600],[...P(38,18),800],[...P(38,50),800]],
-   stone:[[...P(21,24),600],[...P(21,44),600],[...P(42,30),800]],
-   iron:[[...P(13,30),600],[...P(13,38),600],[...P(42,38),800]],
+   
+   food:[[...P(18,30),600],[...P(18,38),600],[...P(14,34),600],...clu(...P(30,22),700),...clu(...P(30,46),700)],
+   gold:[[...P(16,26),600],[...P(16,42),600],[...P(19,22),600],...clu(...P(38,18),800),...clu(...P(38,50),800)],
+   stone:[[...P(21,24),600],[...P(21,44),600],[...P(24,20),600],...clu(...P(42,30),800)],
+   iron:[[...P(13,30),600],[...P(13,38),600],[...P(10,26),600],...clu(...P(42,38),800)],
   });
   
   addMir({
@@ -1274,13 +1503,15 @@ function addNavalNodes(){
    define the left half and mirror it. Wood comes from forest tiles unless a map
    deliberately has none. */
 const addMir=tab=>{for(const k in tab){addN(k,tab[k]);addN(k,tab[k].map(([x,y,a])=>[W-x,y,a]));}};
+
+const clu=(x,y,amt)=>[[0,0],[2,1],[-1,2]].map(([dx,dy])=>[x+dx*TILE,y+dy*TILE,amt]);
 function addLandNodes(){
   
   addMir({
    food:[[1160,1200,550],[1160,1680,550],[1000,1440,550],[640,1150,550]],
-   gold:[[1080,1120,550],[1120,1780,550],[560,1350,550], [2100,760,800],[2380,540,800],[2500,640,800]],
-   stone:[[1360,1000,550],[1400,1900,550],[560,1550,550], [2180,2140,800],[2380,2340,800],[2500,2240,800]],
-   iron:[[940,860,550],[980,2040,550],[640,1750,550], [2000,1440,800],[2440,760,800],[2440,2120,800]],
+   gold:[[1080,1120,550],[1120,1780,550],[560,1350,550], ...clu(2100,760,800),...clu(2380,540,800),...clu(2500,640,800)],
+   stone:[[1360,1000,550],[1400,1900,550],[560,1550,550], ...clu(2180,2140,800),...clu(2380,2340,800),...clu(2500,2240,800)],
+   iron:[[940,860,550],[980,2040,550],[640,1750,550], ...clu(2000,1440,800),...clu(2440,760,800),...clu(2440,2120,800)],
   });
 }
 function addArenaNodes(){ 
@@ -1295,19 +1526,21 @@ function addArenaNodes(){
 function addPlainsNodes(){ 
   const P=(tx,ty)=>[(tx+0.5)*TILE,(ty+0.5)*TILE];
   addMir({
-   food:[[...P(28,28),600],[...P(28,40),600],[...P(24,34),600],[...P(44,20),700],[...P(44,48),700]],
-   gold:[[...P(26,24),600],[...P(26,44),600],[...P(50,30),800],[...P(56,16),800]],
-   stone:[[...P(31,22),600],[...P(31,46),600],[...P(50,38),800],[...P(56,52),800]],
-   iron:[[...P(22,30),600],[...P(22,38),600],[...P(58,34),800]],
+   
+   food:[[...P(28,28),600],[...P(28,40),600],[...P(24,34),600],...clu(...P(44,20),700),...clu(...P(44,48),700)],
+   gold:[[...P(26,24),600],[...P(26,44),600],[...P(23,20),600],...clu(...P(50,30),800),...clu(...P(56,16),800)],
+   stone:[[...P(31,22),600],[...P(31,46),600],[...P(28,48),600],...clu(...P(50,38),800),...clu(...P(56,52),800)],
+   iron:[[...P(22,30),600],[...P(22,38),600],[...P(19,34),600],...clu(...P(58,34),800)],
   });
 }
 function addHighlandNodes(){ 
   const P=(tx,ty)=>[(tx+0.5)*TILE,(ty+0.5)*TILE],cx=(TW/2)|0,cy=(TH/2)|0;
   addMir({
+   
    food:[[...P(28,30),600],[...P(28,38),600],[...P(24,34),600]],
-   gold:[[...P(20,14),700],[...P(20,TH-15),700],[...P(cx-4,cy-3),900]],   
-   stone:[[...P(22,16),700],[...P(22,TH-17),700],[...P(cx-4,cy+2),900]],
-   iron:[[...P(26,34),600],[...P(40,24),800],[...P(40,TH-25),800]],       
+   gold:[...clu(...P(20,14),700),...clu(...P(20,TH-15),700),...clu(...P(cx-4,cy-3),900)],   
+   stone:[...clu(...P(22,16),700),...clu(...P(22,TH-17),700),...clu(...P(cx-4,cy+2),900)],
+   iron:[[...P(26,34),600],[...P(24,30),600],[...P(24,38),600],...clu(...P(40,24),800),...clu(...P(40,TH-25),800)], 
   });
 }
 MAP_DEF.nodes();
@@ -1452,7 +1685,9 @@ function dbgScan(){
   for(const v of villagers)if(alive(v)&&!v.garrisoned){
     stk(v);
     if(v.job&&v.state==='idle'&&(!v.path||!v.path.length)){v._idleT=(v._idleT||0)+0.5;
-      if(v._idleT>3&&!v._idleLog){v._idleLog=1;logEvt('發呆',v,`job=${v.job} 缺=${v.lackRes||'-'} 有可採節點=${availRes(v.job,v.side)?'是':'否'}${v.carry>0?' 背'+Math.round(v.carry)+(v.carryType||''):''}`);}} 
+      if(v._idleT>3&&!v._idleLog){v._idleLog=1;
+        const gl=availRes(v.job,v.side),rc=!!nearestNode(v.job,v.x,v.y,v); 
+        logEvt('發呆',v,`job=${v.job} 缺=${v.lackRes||'-'} 有可採節點=${rc?'是':(gl?'是(走不到)':'否')}${v.carry>0?' 背'+Math.round(v.carry)+(v.carryType||''):''}`);}} 
     else{v._idleT=0;v._idleLog=0;}
   }
   if(traceOn)traceTick();
@@ -1661,8 +1896,192 @@ function spawnScout(b=playerTC){
     x:vx,y:vy,
     hp:SCT.hp,maxHp:SCT.hp,mode:'explore',pt:null,adj:false,manual:false,skirtSg:0,skirtT:0,
     path:[],dest:null,expT:null,repathT:0,quarry:null,lastSeen:null,lostT:0,stunT:0,revealT:0,
-    movedT:0,hurtT:-9});
+    movedT:0,hurtT:-9,sea:false,dom:undefined,morphT:0,morphTo:false,manT:null});
   renderScoutbar();
+}
+
+const scoutSp =s=>s.sea?SCT_SEA.sp :SCT.sp;
+const scoutVis=s=>s.sea?SCT_SEA.vis:SCT.vis;
+const seaScoutOK=si=>modOf(si||0).seaScout>0; 
+
+function scoutMorphSpot(s,toSea,comp){
+  const tx=txOf(s.x),ty=tyOf(s.y);
+  if(comp!==undefined&&comp!==null)ensurePathComp();
+  for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+    const nx=tx+dx,ny=ty+dy;if(nx<0||ny<0||nx>=TW||ny>=TH)continue;
+    const i=idx(nx,ny);
+    if(blocked[i])continue;
+    if(!domOK(i,toSea?'water':undefined))continue;   
+    if(!toSea&&hgtI(i)>0.5)continue;                 
+    if(comp!==undefined&&comp!==null&&(toSea?pathCompW:pathCompL)[i]!==comp)continue; 
+    return {x:(nx+.5)*TILE,y:(ny+.5)*TILE};
+  }
+  return null;
+}
+
+function scoutMorphStart(s,toSea,comp){
+  if(s.morphT>0||!!s.sea===!!toSea)return false;
+  if(toSea&&!seaScoutOK(s.side||0))return false;
+  const spot=scoutMorphSpot(s,toSea,comp);if(!spot)return false;
+  s.morphT=SCT_SEA.morph;s.morphTo=!!toSea;s.morphSpot=spot;
+  s.path=[];s.dest=null;                            
+  return true;
+}
+function scoutMorphTick(s,dt){                       
+  if(!(s.morphT>0))return false;
+  s.morphT-=dt;
+  if(s.morphT>0)return true;
+  s.morphT=0;s.sea=!!s.morphTo;s.dom=s.sea?'water':undefined;
+  if(s.morphSpot){s.x=s.morphSpot.x;s.y=s.morphSpot.y;s.morphSpot=null;} 
+  s.path=[];s.dest=null;s.expT=null;s.movedT=t;s.crossC=null; 
+  if((s.side||0)===0)renderScoutbar();
+  return true;
+}
+
+function scoutReach(s,px,py){
+  ensurePathComp();
+  const C=s.sea?pathCompW:pathCompL,a=C[idx(txOf(s.x),tyOf(s.y))],b=C[idx(txOf(px),tyOf(py))];
+  return a>=0&&a===b;
+}
+
+function nearestUnexploredDom(s,si){
+  ensurePathComp();
+  const exp=si===0?explored:exploredE,unr=si===0?unreachable:unreachableE;
+  const C=s.sea?pathCompW:pathCompL,my=C[idx(txOf(s.x),tyOf(s.y))];
+  if(my<0)return null;
+  let best=null,bd=1e18;
+  for(let ty2=0;ty2<TH;ty2++)for(let tx2=0;tx2<TW;tx2++){
+    const i=idx(tx2,ty2);
+    if(exp[i]||unr[i]||C[i]!==my)continue;
+    const px=(tx2+.5)*TILE,py=(ty2+.5)*TILE;
+    if(scoutUnsafe(px,py,si))continue;
+    const dd=(px-s.x)**2+(py-s.y)**2;
+    if(dd<bd){bd=dd;best={x:px,y:py};}
+  }
+  return best;
+}
+
+function scoutCrossPlan(s,si,anyDest){
+  if(!seaScoutOK(si))return null;
+  ensurePathComp();
+  const exp=si===0?explored:exploredE,unr=si===0?unreachable:unreachableE;
+  const toSea=!s.sea,C2=toSea?pathCompW:pathCompL,C1=s.sea?pathCompW:pathCompL;
+  const my=C1[idx(txOf(s.x),tyOf(s.y))];if(my<0)return null;
+  
+  let best=null,bd=1e18,seen=new Set();
+  for(let ty2=0;ty2<TH;ty2++)for(let tx2=0;tx2<TW;tx2++){
+    const i=idx(tx2,ty2);
+    if(C1[i]!==my||blocked[i])continue;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=tx2+dx,ny=ty2+dy;if(nx<0||ny<0||nx>=TW||ny>=TH)continue;
+      const j=idx(nx,ny);
+      if(blocked[j]||C2[j]<0)continue;
+      if(!toSea&&hgtI(j)>0.5)continue;
+      if(!seen.has(C2[j])){                          
+        let has=!!anyDest;
+        if(!has)for(let k=0;k<C2.length;k++)if(C2[k]===C2[j]&&!exp[k]&&!unr[k]){has=true;break;}
+        seen.add(C2[j]);if(has)seen.add('ok'+C2[j]);
+      }
+      if(!seen.has('ok'+C2[j]))continue;
+      const px=(tx2+.5)*TILE,py=(ty2+.5)*TILE;
+      if(scoutUnsafe(px,py,si))continue;             
+      const dd=(px-s.x)**2+(py-s.y)**2;
+      if(dd<bd){bd=dd;best={x:px,y:py,c:C2[j]};}     
+    }
+  }
+  return best;
+}
+
+const SCT_RELAY_MAX=4;                                
+let xgV=-1,xgE=null;                                  
+function crossGraph(){ 
+  ensurePathComp();
+  if(xgE&&xgV===pathCompV)return xgE;
+  const g=new Map();
+  const add=(a,b,i)=>{let m=g.get(a);if(!m)g.set(a,m=new Map());let l=m.get(b);if(!l)m.set(b,l=[]);l.push(i);};
+  for(let ty=0;ty<TH;ty++)for(let tx=0;tx<TW;tx++){
+    const i=idx(tx,ty);if(blocked[i])continue;
+    const cl=pathCompL[i],cw=pathCompW[i];
+    if(cl<0&&cw<0)continue;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=tx+dx,ny=ty+dy;if(nx<0||ny<0||nx>=TW||ny>=TH)continue;
+      const j=idx(nx,ny);if(blocked[j])continue;
+      if(cl>=0&&pathCompW[j]>=0)add('L'+cl,'W'+pathCompW[j],i);                 
+      if(cw>=0&&pathCompL[j]>=0&&hgtI(j)<=0.5)add('W'+cw,'L'+pathCompL[j],i);   
+    }
+  }
+  xgE=g;xgV=pathCompV;return g;
+}
+function domCompAt(px,py){ 
+  ensurePathComp();
+  const cx=txOf(px),cy=tyOf(py);
+  for(let r=0;r<=3;r++)for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+    if(Math.max(Math.abs(dx),Math.abs(dy))!==r)continue;
+    const nx=cx+dx,ny=cy+dy;if(nx<0||ny<0||nx>=TW||ny>=TH)continue;
+    const i=idx(nx,ny);if(blocked[i])continue;
+    if(pathCompL[i]>=0)return 'L'+pathCompL[i];
+    if(pathCompW[i]>=0)return 'W'+pathCompW[i];
+  }
+  return null;
+}
+function scoutRelayPlan(s,si,dx,dy){ 
+  if(!seaScoutOK(si))return null;
+  ensurePathComp();
+  const sc=(s.sea?pathCompW:pathCompL)[idx(txOf(s.x),tyOf(s.y))];if(sc<0)return null;
+  const start=(s.sea?'W':'L')+sc,goal=domCompAt(dx,dy);
+  if(!goal||goal===start)return null;                 
+  const g=crossGraph();
+  const prev=new Map([[start,null]]);
+  let front=[start],hop=0;
+  while(front.length&&hop<SCT_RELAY_MAX&&!prev.has(goal)){ 
+    const nxt=[];
+    for(const k of front){const m=g.get(k);if(!m)continue;
+      for(const k2 of m.keys())if(!prev.has(k2)){prev.set(k2,k);nxt.push(k2);}} 
+    front=nxt;hop++;
+  }
+  if(!prev.has(goal))return null;
+  const chain=[];for(let k=goal;k;k=prev.get(k))chain.unshift(k);
+  
+  let hx=dx,hy=dy,first=null;
+  for(let i=chain.length-2;i>=0;i--){
+    const list=g.get(chain[i]).get(chain[i+1]);
+    let best=-1,bd=1e18;
+    for(const ti of list){
+      const px=(ti%TW+.5)*TILE,py=((ti/TW|0)+.5)*TILE;
+      if(scoutUnsafe(px,py,si))continue;               
+      let d=(px-hx)**2+(py-hy)**2;
+      if(i===0)d+=(px-s.x)**2+(py-s.y)**2;
+      if(d<bd){bd=d;best=ti;}
+    }
+    if(best<0)return null;                             
+    hx=(best%TW+.5)*TILE;hy=((best/TW|0)+.5)*TILE;
+    if(i===0)first={x:hx,y:hy,c:+chain[1].slice(1)};
+  }
+  return first;
+}
+
+function scoutHopPlan(s,si,landOnly){
+  if(!seaScoutOK(si))return null;
+  ensurePathComp();
+  const exp=si===0?explored:exploredE,unr=si===0?unreachable:unreachableE;
+  const myC=(s.sea?'W':'L')+(s.sea?pathCompW:pathCompL)[idx(txOf(s.x),tyOf(s.y))];
+  const best=new Map();                               
+  for(let ty=0;ty<TH;ty+=2)for(let tx=0;tx<TW;tx+=2){ 
+    const i=idx(tx,ty);if(exp[i]||unr[i])continue;
+    const cl=pathCompL[i],cw=pathCompW[i];
+    const k=cl>=0?'L'+cl:(cw>=0&&!landOnly?'W'+cw:null);
+    if(!k||k===myC)continue;
+    const px=(tx+.5)*TILE,py=(ty+.5)*TILE,d=(px-s.x)**2+(py-s.y)**2;
+    const o=best.get(k);if(o&&d>=o.d)continue;
+    if(scoutUnsafe(px,py,si))continue;                
+    best.set(k,{x:px,y:py,d});
+  }
+  const list=[...best.values()].sort((a,b)=>a.d-b.d);
+  for(let n=0;n<Math.min(4,list.length);n++){         
+    const cp=scoutRelayPlan(s,si,list[n].x,list[n].y);
+    if(cp)return cp;
+  }
+  return null;
 }
 
 /* ============ 4. Pathfinding (A* over tiles) ============
@@ -1871,7 +2290,7 @@ function updateFog(){
   visible.fill(0);
   for(const v of villagers)if((v.side||0)===0&&v.hp>0&&!v.garrisoned)addVision(v.x,v.y,5);
   for(const u of units)if(u.side===0&&u.hp>0&&!u.gar)addVision(u.x,u.y,UT[u.type].vis);
-  for(const s of scouts)if((s.side||0)===0&&s.hp>0)addVision(s.x,s.y,SCT.vis);
+  for(const s of scouts)if((s.side||0)===0&&s.hp>0)addVision(s.x,s.y,scoutVis(s)); 
   for(const b of buildings)if(b.side===0&&b.hp>0&&b.done)addVision(b.x,b.y,BT[b.type].vis+techMod.bldVis); 
   for(let i=0;i<visible.length;i++)if(visible[i])lastSeenT[i]=t;
   for(const b of buildings)if(b.side===1&&b.hp>0&&visible[idx(txOf(b.x),tyOf(b.y))])b.seen=true;
@@ -1879,7 +2298,7 @@ function updateFog(){
   visibleE.fill(0);
   for(const u of units)if(u.side===1&&u.hp>0&&!u.gar)castVision(u.x,u.y,UT[u.type].vis,visibleE,1,modOf(1).forestPierce);
   for(const v of villagers)if(v.side===1&&v.hp>0&&!v.garrisoned)castVision(v.x,v.y,5,visibleE,1,modOf(1).forestPierce); 
-  for(const s of scouts)if(s.side===1&&s.hp>0)castVision(s.x,s.y,SCT.vis,visibleE,1,modOf(1).forestPierce);
+  for(const s of scouts)if(s.side===1&&s.hp>0)castVision(s.x,s.y,scoutVis(s),visibleE,1,modOf(1).forestPierce);
   for(const b of buildings)if(b.side===1&&b.hp>0&&b.done)castVision(b.x,b.y,BT[b.type].vis+modOf(1).bldVis,visibleE,1,modOf(1).forestPierce);
   for(const b of buildings)if(b.side===0&&b.hp>0&&visibleE[idx(txOf(b.x),tyOf(b.y))])b.seenE=true;
   for(let i=0;i<visibleE.length;i++)if(visibleE[i])lastSeenTE[i]=t; 
@@ -2013,6 +2432,7 @@ function withdrawSite(b){
    you see is what is occupied, and how many units a wood can hide follows from it
    rather than from a capacity number. */
 const bodyR=o=>o.type&&UT[o.type]?(UT[o.type].br||6):(o.mode?8:6); 
+const BR_MAX=16; 
 /* Concealment feedback: a unit standing on a deep forest tile -- one whose eight
    neighbours are all trees, so normal sight cannot reach it -- and not currently
    exposed by its own fire is drawn semi-transparent, meaning "hidden". Standing at
@@ -2067,8 +2487,9 @@ function inEcoReach(n,si){let any=false;si=si||0;
 function dropBuilding(x,y,si){let b=null,bd=1e18;si=si||0; 
   for(const o of buildings)if(o.side===si&&o.done&&o.hp>0&&BT[o.type].dropoff){const d=Math.hypot(o.x-x,o.y-y);if(d<bd){bd=d;b=o;}}
   return b;}
-function nearestNode(k,x,y,self,safe){let b=null,bd=1e9,bUns=null,bdUns=1e9,bF=null,bdF=1e9;
-  const seat=nodeSeats(); 
+function nearestNode(k,x,y,self,safe,seat0){let b=null,bd=1e9,bUns=null,bdUns=1e9,bF=null,bdF=1e9;
+  
+  const seat=seat0||nodeSeats();
   const si=(self&&self.side)||0;
   const myComp=landComp?landComp[idx(txOf(x),tyOf(y))]:-1; 
   const drop=dropBuilding(x,y,si); 
@@ -2170,34 +2591,66 @@ const availRes=(k,si)=>{const seat=nodeSeats();return nodes.some(n=>n.type===k&&
   &&(n.forestI!==undefined?(forestMarkedFor(n.forestI,si||0)&&n.amt>0&&inEcoReach(n,si)):(n.farm||(n.amt>0&&!n.sea&&inEcoReach(n,si)))));}; 
 const resName=k=>RES.find(r=>r.k===k).nm;
 
+
+function resCompAvail(si){
+  si=si||0;const seat=nodeSeats(),m={};
+  for(const r of RES)m[r.k]=new Set();
+  const drops=[];for(const b of buildings)if((b.side||0)===si&&b.done&&b.hp>0&&BT[b.type].dropoff)drops.push(b);
+  const inReach=n=>{if(!drops.length)return true;                 
+    for(const b of drops)if(Math.hypot(n.x-b.x,n.y-b.y)<=ECO_REACH)return true;return false;};
+  for(const n of nodes){
+    if(n.sea)continue;                                            
+    const set=m[n.type];if(!set)continue;
+    const i=idx(txOf(n.x),tyOf(n.y)),c=landComp?landComp[i]:-1;
+    if(set.has(c))continue;                                       
+    if(!(n.fSide===undefined||n.fSide===si))continue;             
+    if(!(n.farm||seatsFreeIn(seat,n,null)||(seat.get(n)&&seat.get(n).s[si]>0)))continue; 
+    if(dmaskOf(si)[i]===2||remDangerS(i,si))continue;             
+    if(n.forestI!==undefined){if(!(forestMarkedFor(n.forestI,si)&&n.amt>0&&inReach(n)))continue;}
+    else if(!(n.farm||(n.amt>0&&inReach(n))))continue;            
+    set.add(c);
+  }
+  return m;
+}
 function rebalance(si){si=si||0; 
   const ws=villagers.filter(v=>alive(v)&&(v.side||0)===si&&!v.garrisoned&&v.state!=='flee'&&v.state!=='fight'&&v.state!=='retreat'&&!v.buildSite&&!v.repairU);
   const shares=S_(si).shares;
+  const cm=resCompAvail(si);
+  const grp=new Map();                                            
+  for(const v of ws){const c=landComp?landComp[idx(txOf(v.x),tyOf(v.y))]:-1;
+    let g=grp.get(c);if(!g){g=[];grp.set(c,g);}g.push(v);}
+  for(const [c,gws] of grp)rebalanceGrp(si,gws,shares,cm,c);
+}
+function rebalanceGrp(si,ws,shares,cm,comp){ 
+  const has=k=>comp<0?cm[k].size>0:cm[k].has(comp); 
   let tot=0;const eff={};
-  RES.forEach(r=>{eff[r.k]=availRes(r.k,si)?shares[r.k]:0;tot+=eff[r.k];});
+  RES.forEach(r=>{eff[r.k]=has(r.k)?shares[r.k]:0;tot+=eff[r.k];});
   if(tot===0){ws.forEach(v=>{v.job=null;v.node=null;});return;}
   const N=ws.length,desired={},fr=[];let acc=0;
   RES.forEach(r=>{const id=eff[r.k]/tot*N;desired[r.k]=Math.floor(id);acc+=desired[r.k];
     if(eff[r.k]>0)fr.push({k:r.k,f:id-Math.floor(id)});});
   fr.sort((a,b)=>b.f-a.f);
   for(let i=0;i<N-acc&&fr.length;i++)desired[fr[i%fr.length].k]++;
-  ws.forEach(v=>{if(v.job&&!availRes(v.job,si)){v.job=null;v.node=null;}});
+  ws.forEach(v=>{if(v.job&&!has(v.job)){v.job=null;v.node=null;}});
   RES.forEach(r=>{
     const mine=ws.filter(v=>v.job===r.k);let over=mine.length-desired[r.k];
     if(over<=0)return;
     mine.sort((a,b)=>(a.state==='gather'?1:0)-(b.state==='gather'?1:0));
     for(let i=0;i<over;i++){mine[i].job=null;mine[i].node=null;}
   });
+  
+  let seat=nodeSeats();
   RES.forEach(r=>{
     let need=desired[r.k]-ws.filter(v=>v.job===r.k).length;
     if(need<=0)return;
     const pool=ws.filter(v=>!v.job);
     for(let i=0;i<need&&pool.length;i++){
       let bi=-1,bd=1e9;
-      pool.forEach((v,j)=>{const n=nearestNode(r.k,v.x,v.y,v);
+      pool.forEach((v,j)=>{const n=nearestNode(r.k,v.x,v.y,v,undefined,seat);
         if(n){const d=Math.hypot(n.x-v.x,n.y-v.y);if(d<bd){bd=d;bi=j;}}});
       if(bi<0)break;
       const v=pool.splice(bi,1)[0];v.job=r.k;v.node=null;
+      seat=nodeSeats();                       
     }
   });
 }
@@ -2351,7 +2804,7 @@ function villStance(v,th){
    were doing" walks them back to their group, so nobody can hand-place a formation
    unit by unit with it. */
 function nudgeSpeed(u){
-  if(u.scout||u.mode)return SCT.sp;            
+  if(u.scout||u.mode)return u.sea?SCT_SEA.sp:SCT.sp; 
   if(u.carry!==undefined)return 75;            
   return (UT[u.type]&&UT[u.type].sp)||70;      
 }
@@ -2719,7 +3172,7 @@ function isLegalPosition(e,px,py){
 /* Melee cannot reach across a cliff -- more than half a level of difference
    forbids it, a ramp's half level does not. Ranged fire is unaffected. */
 function canMeleeXY(a,e){return sameLevelXY(a,e);}
-const isWaterUnit=e=>!!(e&&e.type&&UT[e.type]&&UT[e.type].dom==='water'); 
+const isWaterUnit=e=>!!(e&&(e.dom==='water'||(e.type&&UT[e.type]&&UT[e.type].dom==='water')));  
 function canMelee(u,e){
   if(UT[u.type].rng>=50)return true;
   if(!e.size&&(u.dom==='water')!==isWaterUnit(e))return false; 
@@ -2816,13 +3269,16 @@ function avoidBlocker(u,tx2,ty2,st){
   const dx=tx2-u.x,dy=ty2-u.y,dd=Math.hypot(dx,dy);
   if(dd<1e-6)return null;
   const ux=dx/dd,uy=dy/dd,br=bodyR(u);
-  const look=Math.min(dd-2,st+br+10);       
-  if(look<=0)return null;
+  
+  const reach=Math.min(dd-2,st+2*BR_MAX+4); 
+  if(reach<=0)return null;
   let blk=null,blkD=1e9;
   const scan=o=>{
     if(o===u||o===u.tgt||o.hp<=0||o.gar||o.garrisoned)return;
     if(t-(o.movedT||0)<0.5)return;            
     const ox=o.x-u.x,oy=o.y-u.y,rad=bodyR(u)+bodyR(o);
+    const look=Math.min(dd-2,st+rad+4);       
+    if(look<=0)return;
     if(Math.abs(ox)>look+rad||Math.abs(oy)>look+rad)return;
     const along=ox*ux+oy*uy;
     if(along<=0||along>look)return;
@@ -2841,9 +3297,9 @@ function avoidBlocker(u,tx2,ty2,st){
     let hit=false;
     const chk=o=>{if(hit||o===u||o===u.tgt||o.hp<=0||o.gar||o.garrisoned)return;
       if(t-(o.movedT||0)<0.5)return;
-      const ox=o.x-u.x,oy=o.y-u.y,along=ox*cx2+oy*cy2;
-      if(along<=0||along>st+br+10)return;
-      if(Math.abs(ox*cy2-oy*cx2)<bodyR(u)+bodyR(o))hit=true;};
+      const ox=o.x-u.x,oy=o.y-u.y,along=ox*cx2+oy*cy2,rad=bodyR(u)+bodyR(o);
+      if(along<=0||along>st+rad+4)return;     
+      if(Math.abs(ox*cy2-oy*cx2)<rad)hit=true;};
     for(const o of units)chk(o);if(!hit)for(const o of villagers)chk(o);if(!hit)for(const o of scouts)chk(o);
     if(!hit)return {x:nx,y:ny};
   }
@@ -3066,8 +3522,11 @@ function uTick(u,dt){
     const T2=u.boardTgt;
     if(T2.hp<=0||!canBoard(T2,T.vol||1))u.boardTgt=null;
     else{
-      if(Math.hypot(T2.x-u.x,T2.y-u.y)<=TILE*1.7){
-        (T2.cargo=T2.cargo||[]).push(u);u.gar=T2;u.boardTgt=null;u.path=[];u.tgt=null;u.wp=null;u.dest=null;
+      
+      const bd2=Math.hypot(T2.x-u.x,T2.y-u.y);
+      if(u._bdD===undefined||bd2<u._bdD-4){u._bdD=bd2;u._bdS=0;}else u._bdS=(u._bdS||0)+dt;
+      if(bd2<=TILE*1.7||(bd2<=TILE*3&&u._bdS>2.5)){
+        (T2.cargo=T2.cargo||[]).push(u);u.gar=T2;u.boardTgt=null;u._bdD=undefined;u._bdS=0;u.path=[];u.tgt=null;u.wp=null;u.dest=null;
         if(!units.some(o=>o.boardTgt===T2)){T2.path=[];T2.dest=null;} 
       }else{if(!u.path.length)u.path=uFP(u,T2.x,T2.y);stepPath(u,dt);} 
       return;
@@ -3344,18 +3803,35 @@ function ejectAll(b,scatter){
 /* Transports are garrisons that move: capacity is the sum of unit volumes, loading
    and unloading crosses the land/water boundary, and a partial unload is fine when
    there is not enough room ashore. */
-const transHold=T=>UT[T.type].hold||0;
+const transHold=T=>{const h=UT[T.type].hold||0;return h?h+modOf(T.side||0).transHold:0;}; 
 function transUsed(T){let v=0;if(T.cargo)for(const c of T.cargo)v+=UT[c.type].vol||1;return v;}
 function canBoard(T,vol){return T.hp>0&&transUsed(T)+vol<=transHold(T);}
 function boardTransport(u,T){ 
   if(!T||T.hp<=0||!transHold(T)||!canBoard(T,UT[u.type].vol||1))return false;
-  u.boardTgt=T;u.tgt=null;u.wp=null;return true;
+  u.boardTgt=T;u.tgt=null;u.wp=null;u._bdD=undefined;u._bdS=0;return true; 
 }
 function unloadTransport(T,x,y){if(T&&transHold(T)){T.unloadPt={x,y};return true;}return false;} 
 function loadNearby(T){ 
   const cand=units.filter(u=>u.side===T.side&&u.hp>0&&!u.gar&&!u.boardTgt&&UT[u.type].dom!=='water'&&Math.hypot(u.x-T.x,u.y-T.y)<220);
   cand.sort((a,b)=>(b.type==='settler')-(a.type==='settler')||Math.hypot(a.x-T.x,a.y-T.y)-Math.hypot(b.x-T.x,b.y-T.y));
   let n=0;for(const u of cand){if(!canBoard(T,UT[u.type].vol||1))break;if(boardTransport(u,T))n++;}
+  return n;
+}
+
+let shipSel=[];                                        
+const shipSelAlive=()=>{shipSel=shipSel.filter(u=>u&&u.hp>0&&!u.gar&&units.includes(u));return shipSel;};
+function shipSelOnScreen(seed){ 
+  const x0=cam.x-TILE,y0=cam.y-TILE,x1=cam.x+vw/cam.z+TILE,y1=cam.y+vh/cam.z+TILE;
+  shipSel=units.filter(u=>u.side===0&&u.hp>0&&!u.gar&&UT[u.type].hold&&u.x>=x0&&u.x<=x1&&u.y>=y0&&u.y<=y1);
+  if(seed&&!shipSel.includes(seed))shipSel.push(seed);
+  return shipSel.length;
+}
+function shipDestCmd(x,y){ 
+  const list=shipSelAlive();let n=0;
+  for(const u of list){
+    if(!uFP(u,x,y).length)continue;   
+    if(moveShipCmd(u,x,y))n++;
+  }
   return n;
 }
 function landSpotsNear(tx,ty,n){ 
@@ -3374,6 +3850,19 @@ function disembark(T,tx,ty){
   for(const s of spots){if(!T.cargo.length)break;const u=T.cargo.shift();
     u.gar=null;u.x=s.x;u.y=s.y;u.path=[];u.dest=null;u.wp=null;u.tgt=null;u.boardTgt=null;u.stunT=0;u.anchor={x:s.x,y:s.y};}
   return T.cargo.length;
+}
+
+const SINK_DMG=[0.3,0.7];                                 
+function sinkTransport(T){
+  if(!T.cargo||!T.cargo.length)return;
+  const aboard=T.cargo.slice();
+  disembark(T,txOf(T.x),tyOf(T.y));                       
+  for(const u of aboard){
+    if(T.cargo.indexOf(u)>=0){u.hp=0;u.gar=null;continue;}
+    u.hp-=Math.round((u.maxHp||1)*(SINK_DMG[0]+rng()*(SINK_DMG[1]-SINK_DMG[0])));
+    if(u.hp<=0){u.hp=0;u.gar=null;}                       
+  }
+  T.cargo.length=0;
 }
 function transFire(u){ 
   if(u.fireOn===false||u.cd>0||!u.cargo)return;
@@ -3404,7 +3893,7 @@ function transTick(u,dt){
   let bd=1e9,bo=null;
   for(const o of units)if(o.boardTgt===u&&o.hp>0){const d=Math.hypot(o.x-u.x,o.y-u.y);if(d<bd){bd=d;bo=o;}}
   if(bo){
-    if(bd<=TILE*1.9){u.path=[];u.dest=null;} 
+    if(bd<=TILE*1.6){u.path=[];u.dest=null;} 
     else if(!u.path.length){const wp=nearestWaterXY(bo.x,bo.y);if(wp&&Math.hypot(wp.x-u.x,wp.y-u.y)>TILE)u.path=uFP(u,wp.x,wp.y);} 
   }
   if(u.path.length)stepPath(u,dt); 
@@ -3665,7 +4154,7 @@ function aiScoutRoamPt(s,si){
   }
   return null;
 }
-function nearestUnexplored(x,y,si,phase){si=si||0;
+function nearestUnexplored(x,y,si,phase,dom){si=si||0;
   const exp=si===0?explored:exploredE,unr=si===0?unreachable:unreachableE; 
   /* Exploration: scouts are sent out and left to it. Each claims a fixed wedge
      around the home base and heads for the nearest unexplored frontier inside it,
@@ -3674,6 +4163,8 @@ function nearestUnexplored(x,y,si,phase){si=si||0;
      The wedge deliberately does not rotate with time: it used to, and a rotating
      cone made scouts wander the map in zigzags while overlapping cones sent them all
      to the same place. */
+  ensurePathComp();
+  const C=dom==='water'?pathCompW:pathCompL,comp=C[idx(txOf(x),tyOf(y))]; 
   const hub=aiHub(si),hx=hub?hub.x:x,hy=hub?hub.y:y;
   const heading=(si?Math.PI:0)+(phase||0); 
   const ctx0=txOf(x),cty=tyOf(y);
@@ -3681,6 +4172,7 @@ function nearestUnexplored(x,y,si,phase){si=si||0;
     let best=null,bd=1e18;
     for(let ty2=0;ty2<TH;ty2+=2)for(let tx2=0;tx2<TW;tx2+=2){
       if(exp[idx(tx2,ty2)]||unr[idx(tx2,ty2)])continue;
+      if(comp>=0&&C[idx(tx2,ty2)]!==comp)continue; 
       const px=(tx2+.5)*TILE,py=(ty2+.5)*TILE;
       if(scoutUnsafe(px,py,si))continue; 
       let da=Math.atan2(py-hy,px-hx)-heading;da=Math.atan2(Math.sin(da),Math.cos(da)); 
@@ -3737,8 +4229,38 @@ function nearestForestTile(pt,r){
 function sTick(s,dt){
   if(s.hp<=0)return;
   if(s.stunT>0){s.stunT-=dt;return;}
-  if(nudgeStep(s,dt))return; 
-  const sp=SCT.sp,si=s.side||0; 
+  if(scoutMorphTick(s,dt))return; 
+  
+  if(s.manT&&!s.crossPt&&scoutReach(s,s.manT.x,s.manT.y)){ 
+    const m=s.manT;s.manT=null;
+    if(s.mode==='explore'){s.expT={x:m.x,y:m.y};s.manual=true;s.repathT=999;}
+    else if(s.mode==='observe')s.lastSeen={x:m.x,y:m.y};
+    else s.pt={x:m.x,y:m.y};
+  }
+  const mTgt=s.nudge||s.manT;
+  if(mTgt&&!s.crossPt&&!scoutReach(s,mTgt.x,mTgt.y)){
+    const cp=seaScoutOK(s.side||0)?scoutRelayPlan(s,s.side||0,mTgt.x,mTgt.y):null; 
+    if(cp){s.crossPt={x:cp.x,y:cp.y};s.crossC=cp.c;s.crossT=t;}
+    else if(s.manT){ 
+      s.manT=null;
+      if((s.side||0)===0)alertMsg('yellow',seaScoutOK(0)?STR.msg_scoutNoWay:STR.msg_scoutNeedBoat);
+      if(s.mode==='explore'){s.expT=null;s.manual=false;s.repathT=0;}
+      else if(s.mode==='observe')s.lastSeen=null;
+    }
+  }
+  if(!s.crossPt&&nudgeStep(s,dt))return; 
+  const sp=scoutSp(s),si=s.side||0;
+  if(s.crossPt){ 
+    
+    if(scoutMorphSpot(s,!s.sea,s.crossC)){ 
+      const done=scoutMorphStart(s,!s.sea,s.crossC);s.crossPt=null;if(done)return;
+    }
+    if(s.crossPt){
+      vGoto(s,s.crossPt.x,s.crossPt.y,sp,dt);
+      if(t-(s.crossT||0)>25){s.crossPt=null;s.crossC=null;} 
+      return;
+    }
+  } 
   const fleeFrom=(fx,fy)=>{
     const dx=s.x-fx,dy=s.y-fy,dd=Math.hypot(dx,dy)||1;
     const nx=s.x+dx/dd*sp*dt,ny=s.y+dy/dd*sp*dt;
@@ -3760,13 +4282,29 @@ function sTick(s,dt){
       const unr=si===0?unreachable:unreachableE;
       const roamKeep=(AI_SQUADS&&AI_SCOUTROAM&&s.roam&&s.expT&&!scoutUnsafe(s.expT.x,s.expT.y,si))?s.expT:null; 
       s.roam=false;
+      
+      if(s.sea){
+        const isle=scoutHopPlan(s,si,true); 
+        if(isle){s.crossPt={x:isle.x,y:isle.y};s.crossC=isle.c;s.crossT=t;s.repathT=4;return;}
+      }
       do{ 
-        s.expT=nearestUnexplored(s.x,s.y,si,((s.id*2.39996)%Math.PI)-Math.PI/2); 
-        if(s.expT&&!findPath(s.x,s.y,s.expT.x,s.expT.y).length){
+        s.expT=s.sea?nearestUnexploredDom(s,si) 
+                    :nearestUnexplored(s.x,s.y,si,((s.id*2.39996)%Math.PI)-Math.PI/2,s.dom); 
+        if(s.expT&&!findPath(s.x,s.y,s.expT.x,s.expT.y,undefined,undefined,s.dom).length){
           unr[idx(txOf(s.expT.x),tyOf(s.expT.y))]=1;s.expT=null;
         }else break;
       }while(guard++<5);
       if(!s.expT){
+        
+        const cp=scoutCrossPlan(s,si);
+        if(cp){s.crossPt={x:cp.x,y:cp.y};s.crossC=cp.c;s.crossT=t;s.repathT=4;return;} 
+        const hop=scoutHopPlan(s,si,false); 
+        if(hop){s.crossPt={x:hop.x,y:hop.y};s.crossC=hop.c;s.crossT=t;s.repathT=4;return;}
+        if(s.sea){ 
+          const home=scoutCrossPlan(s,si,true);
+          if(home){s.crossPt=home;s.crossC=null;s.crossT=t;}
+          s.repathT=4;return;
+        }
         if(si===0&&!aiBrained(0)&&!expDone){expDone=true;alertMsg('white',STR.msg_expDone);} 
         if(aiBrained(si)){
           if(AI_SQUADS&&AI_SCOUTROAM){ 
@@ -4052,7 +4590,7 @@ function aiMapFeat(si,force){
   const a=A(si);
   if(!force&&a.feat&&t-a.featT<AI_MAPP.cache)return a.feat;
   const hub=aiHub(si);
-  const f={natAmt:0,natSlots:0,stoneAmt:0,bldFree:0,farmCap:0,copCap:0,clusters:0,defHome:1,defMines:0,defOuts:0};
+  const f={natAmt:0,natSlots:0,stoneAmt:0,bldFree:0,farmCap:0,copCap:0,clusters:0,defHome:1,defMines:0,defOuts:0,defIsle:0};
   a.feat=f;a.featT=t;
   if(!hub)return f;
   const hc=landComp?landComp[idx(txOf(hub.x),tyOf(hub.y))]:-1;
@@ -4061,9 +4599,10 @@ function aiMapFeat(si,force){
   for(const n of nodes){
     if(n.farm||n.sea||n.amt<=0||n.fSide!==undefined)continue;
     if(inEcoReach(n,si)){f.natAmt+=n.amt;if(n.type==='stone')f.stoneAmt+=n.amt;} 
-    else if(n.type==='gold'||n.type==='stone'||n.type==='iron'){
-      const ni=idx(txOf(n.x),tyOf(n.y));
-      if(landComp&&landComp[ni]===hc&&!dmaskOf(si)[ni])outN.push(n);
+    
+    if(n.type==='gold'||n.type==='stone'||n.type==='iron'){
+      const ni=idx(txOf(n.x),tyOf(n.y)),dp=dropoffAt(n.x,n.y,si);
+      if((dp?Math.hypot(n.x-dp.x,n.y-dp.y)/TILE:1e9)>=AI_EXP_DROP&&landComp&&landComp[ni]===hc&&!dmaskOf(si)[ni])outN.push(n);
     }
   }
   f.natSlots=f.natAmt/AI_MAPP.perVill;
@@ -4098,7 +4637,26 @@ function aiMapFeat(si,force){
   }
   for(const k in areas)if(areas[k]>=2)f.defMines++;
   f.defOuts=buildings.filter(b=>b.side===si&&b.hp>0&&b.type==='outpost').length;
+  f.defIsle=aiIsleOuts(si).length; 
   return f;
+}
+
+const AI_ISL_VILL=3; 
+const AI_ISL_VILL_WAR=1; 
+function aiIsleOuts(si,any){ 
+  if(!landComp)return [];
+  const hub=aiHub(si);if(!hub)return [];
+  const hc=landComp[idx(txOf(hub.x),tyOf(hub.y))];
+  const out=[];
+  for(const b of buildings){
+    if(b.side!==si||b.hp<=0||b.type!=='outpost')continue;
+    const c=landComp[idx(txOf(b.x),tyOf(b.y))];
+    if(c<0||c===hc)continue;                                   
+    if(!b.done)continue;                                       
+    if(!any&&!villagers.some(v=>alive(v)&&(v.side||0)===si&&landComp[idx(txOf(v.x),tyOf(v.y))]===c))continue; 
+    out.push(b);
+  }
+  return out;
 }
 function aiNatLeft(si,k){ 
   return nodes.some(n=>n.type===k&&!n.farm&&!n.sea&&n.amt>0&&n.fSide===undefined
@@ -4113,6 +4671,7 @@ function aiTowerCap(si){
   let n=f.defHome;
   if(d.towers>=2)n+=f.defMines;
   if(d.towers>=3)n+=f.defOuts;
+  else n+=f.defIsle; 
   return n;}
 /* Castles are capped by the stone economy and the number of defensible points, not
    by a number in the difficulty table. The difficulty tier only says how ambitious
@@ -4149,6 +4708,7 @@ const aiCastleWant=si=>{const d=aiD(si);
 function aiHarassThr(si){const lv=A(si).diff;return lv==='noob'?4:lv==='normal'?3:2;} 
 function aiTowerSpot(si,vills){
   const a=A(si);
+  for(const b of aiIsleOuts(si))if(!aiBldNear(si,'tower',b.x,b.y,4))return b; 
   if(vills>=12&&a.homeRally&&!aiBldNear(si,'tower',a.homeRally.x,a.homeRally.y,5))return a.homeRally;
   const thr=aiHarassThr(si);
   for(const k in a.harassAt){const h=a.harassAt[k];if(h.n>=thr&&!aiBldNear(si,'tower',h.x,h.y,5))return h;}
@@ -4195,6 +4755,17 @@ function aiEcoTick(si){
   const vTarget=aiVillT(si,T.age);
   if(vills.length+cqCount('villager',si)<vTarget&&(hub.cq?hub.cq.length:0)<2)
     aiNeed(si,'unit:vill','eco',1.4+(vTarget-vills.length)/vTarget,VIL.cost,()=>AICMD.trainVillager(hub));
+  
+  for(const ob of aiIsleOuts(si,true)){
+    const ic=landComp[idx(txOf(ob.x),tyOf(ob.y))];
+    
+    const warCap=(AI_ISL_MIL&&aiIsleFoe(si,ic))?AI_ISL_VILL_WAR:AI_ISL_VILL;
+    const on=villagers.filter(v=>alive(v)&&(v.side||0)===si&&landComp[idx(txOf(v.x),tyOf(v.y))]===ic).length;
+    if(on>=warCap||(ob.cq?ob.cq.length:0)>=2)continue;
+    if(!nodes.some(n=>n.amt>0&&!n.sea&&n.fSide===undefined&&landComp[idx(txOf(n.x),tyOf(n.y))]===ic))continue; 
+    aiNeed(si,'isl:vill','eco',1.3,VIL.cost,()=>AICMD.trainVillager(ob));
+    break;                                                                        
+  }
   
   {const nSc=scouts.filter(s=>(s.side||0)===si).length,aS=A(si);
    const urg=aiIntelUrg(si);
@@ -4365,8 +4936,13 @@ function aiTechLine(si,T){
   const a=A(si),d=aiD(si),cai=civOf(si).ai; 
   const hasDock=buildings.some(b=>b.side===si&&b.done&&b.hp>0&&b.type==='dock');
   const tail=['E3','E5','E4','P1','F2'];
+  
+  if(hasDock&&AI_AMPH&&aiCrossWater(si))tail.unshift('N6');
+
   const core=hasDock?['E1','E2','S1','F1','N1','M3','U1','N2','M1','S2','N3','U2','M2','S3','M4','U3']
                     :['E1','E2','S1','F1','M3','U1','M1','S2','U2','M2','S3','M4','U3'];
+  
+  if(hasDock&&aiCrossWater(si)){const at=core.indexOf('N1');core.splice(at<0?0:at,0,'N7');}
   const pre=[];
   /* Counter-pivot: once the opponent's civilisation has been identified, research
      leans towards the line that counters it.
@@ -4448,7 +5024,9 @@ function aiStratTick(si){
     if(wantExpand)for(const n of nodes){
       if(n.farm||n.sea||n.amt<=0||n.forestI!==undefined)continue;
       if(n.type!=='gold'&&n.type!=='stone'&&n.type!=='iron')continue;
-      if(inEcoReach(n,si))continue;
+      
+      const drop=dropoffAt(n.x,n.y,si),dDrop=drop?Math.hypot(n.x-drop.x,n.y-drop.y)/TILE:1e9;
+      if(dDrop<AI_EXP_DROP)continue;
       const ni=idx(txOf(n.x),tyOf(n.y));
       if(landComp[ni]!==hubC||dmaskOf(si)[ni])continue; 
       const dMe=Math.hypot(n.x-hub.x,n.y-hub.y);
@@ -4456,6 +5034,10 @@ function aiStratTick(si){
       if(dMe>dFoe*(contest?1.35:1))continue; 
       if(gapOn&&buildings.some(b=>b.side===si&&b.hp>0&&(BT[b.type].cc||b.type==='outpost')&&Math.hypot(n.x-b.x,n.y-b.y)<TILE*AI_OUT_GAP)){
         if(!gapPick)gapPick=n;continue;} 
+      
+      const busy=villagers.reduce((k,v)=>k+((alive(v)&&(v.side||0)===si&&v.node&&v.node.amt>0
+        &&Math.hypot(v.node.x-n.x,v.node.y-n.y)<TILE*AI_MAPP.clusR)?1:0),0);
+      if(busy<AI_EXP_VILL&&!exhausted&&!(crowded&&!inEcoReach(n,si)))continue;
       if(dMe<pd){pd=dMe;pick=n;}
     }
     const outPend=gapOn&&buildings.some(b=>b.side===si&&b.hp>0&&b.type==='outpost'&&!b.done); 
@@ -4470,10 +5052,14 @@ function aiStratTick(si){
         {gate:()=>!!aiFindSpot(si,'tower',gapPick.x,gapPick.y,4)});
   }
   
-  if(AI_SQUADS&&AI_OUTBAR&&dTab.outBar&&!homeSiege){
-    const farO=buildings.find(b=>b.side===si&&b.done&&b.hp>0&&(b.type==='outpost'||b.type==='city')
+  
+  
+  const isleWar=AI_ISL_MIL?aiIsleOuts(si).find(b=>{const c=landComp?landComp[idx(txOf(b.x),tyOf(b.y))]:-1;
+    return c>=0&&aiIsleFoe(si,c)&&!aiBldNear(si,'barracks',b.x,b.y,8);}):null;
+  if(AI_SQUADS&&AI_OUTBAR&&(dTab.outBar||isleWar)&&!homeSiege){
+    const farO=isleWar||buildings.find(b=>b.side===si&&b.done&&b.hp>0&&(b.type==='outpost'||b.type==='city')
       &&Math.hypot(b.x-hub.x,b.y-hub.y)>TILE*14&&!aiBldNear(si,'barracks',b.x,b.y,8));
-    if(farO)aiNeed(si,'bld:outbar','mil',0.85,BT.barracks.cost,
+    if(farO)aiNeed(si,'bld:outbar','mil',isleWar?1.15:0.85,BT.barracks.cost,
       ()=>{const s=aiFindSpot(si,'barracks',farO.x,farO.y,6);return s?!!AICMD.place(si,'barracks',s.tx,s.ty):false;},
       {gate:()=>!!aiFindSpot(si,'barracks',farO.x,farO.y,6)});
   }
@@ -4624,13 +5210,13 @@ function aiZoneOf(x,y){
   let near=null,nd=1e18;
   for(const z of AI_SEA.zones){if(z.c===c)return z;const d=Math.hypot(z.x-x,z.y-y);if(d<nd){nd=d;near=z;}}
   return near;}
-function aiDockSpot(si){ 
+function aiDockSpot(si,anyDanger){ 
   const hub=aiHub(si);if(!hub||!AI_SEA.hasWater||!landComp)return null;
   const hc=landComp[idx(txOf(hub.x),tyOf(hub.y))];
   let best=null,bs=1e18;
   for(let ty=0;ty<TH-1;ty++)for(let tx=0;tx<TW-1;tx++){
     const i=idx(tx,ty);
-    if(terr[i]!==T_WATER||dmaskOf(si)[i])continue; 
+    if(terr[i]!==T_WATER||(!anyDanger&&dmaskOf(si)[i]))continue; 
     if(!canPlace('dock',tx,ty,undefined,si))continue;
     let land=false; 
     for(let y=ty;y<ty+2&&!land;y++)for(let x=tx;x<tx+2&&!land;x++)
@@ -4658,10 +5244,12 @@ function aiTrapSpot(si,z){
 function aiSeaEco(si,T,stk,vills){ 
   const docks=buildings.filter(b=>b.side===si&&b.hp>0&&b.type==='dock');
   if(!docks.length){
+    
+    const spot=()=>aiDockSpot(si)||(AI_AMPH&&aiCrossWater(si)?aiDockSpot(si,true):null);
     if(vills>=AI_ECO.dockVill&&AI_SEA.zones.length)
       aiNeed(si,'bld:dock','sea',1.15,BT.dock.cost,
-        ()=>{const s=aiDockSpot(si);return s?!!AICMD.place(si,'dock',s.tx,s.ty):false;},
-        {gate:()=>!!aiDockSpot(si)});
+        ()=>{const s=spot();return s?!!AICMD.place(si,'dock',s.tx,s.ty):false;},
+        {gate:()=>!!spot()});
     return;
   }
   const dock=docks.find(b=>b.done);if(!dock)return;
@@ -4714,6 +5302,12 @@ function aiNavyWant(T,st,si){
 function aiNavyProd(myShips,T,stk,si){ 
   const dock=buildings.find(b=>b.side===si&&b.done&&b.hp>0&&b.type==='dock'&&b.queue.length<2);
   if(!dock)return;
+  
+  if(AI_AMPH&&AI_SEA.hasWater&&aiCrossWater(si)){
+    const nT=units.filter(u=>u.side===si&&u.type==='transport'&&u.hp>0).length
+      +buildings.reduce((n,b)=>n+(b.side===si?b.queue.filter(q=>q.type==='transport').length:0),0);
+    if(nT<AI_AMPH_KEEP&&aiCanSpend(si,UT.transport.cost,null)){AICMD.queueUnit(dock,'transport');return;}
+  }
   const want=aiNavyWant(T,A(si).state,si),have={};
   for(const u of myShips)have[u.type]=(have[u.type]||0)+1;
   for(const b of buildings)if(b.side===si&&b.hp>0)for(const q of b.queue)if(AI_NAVYTYPES.has(q.type))have[q.type]=(have[q.type]||0)+1;
@@ -4757,6 +5351,8 @@ function aiNavyTick(si){
     if(cur[k]||a.foeSeen[k])a.foeSeen[k]=Math.max(cur[k]||0,(a.foeSeen[k]||0)*0.988);
   if(dock)aiNavyProd(myShips,T,stk,si);
   aiIslandTick(si); 
+  if(AI_AMPH){aiAmphStart(si);aiAmphTick(si);} 
+  if(AI_ISL_WAR){aiIslWarStart(si);aiIslWarTick(si);} 
   if(!myShips.length)return;
   const myStr=myShips.reduce((s,u)=>s+uStr(u),0);
   const cx=myShips.reduce((s,u)=>s+u.x,0)/myShips.length,cy=myShips.reduce((s,u)=>s+u.y,0)/myShips.length;
@@ -4770,6 +5366,14 @@ function aiNavyTick(si){
     if(w){aiOrder(si,AI_G.navy,w.x,w.y,'guard');return;}
   }
   if(t<a.navyRetreatT+10)return; 
+  
+  if(aiAmphOn(si)){
+    const m=a.amph;
+    if(m.phase==='load'||m.phase==='sail'||m.phase==='land'){
+      const T=m.T.find(o=>o.hp>0);
+      if(T){aiOrder(si,AI_G.navy,T.x,T.y,'guard');return;}
+    }
+  }
   /* Escorting comes first: an enemy ship sighted within nine tiles of our fishing
      boats, transports or fisheries gives the fleet an intercept point. */
   const assets=units.filter(u=>u.side===si&&u.hp>0&&!u.gar&&(u.type==='fishing'||u.type==='transport'));
@@ -4816,6 +5420,56 @@ function aiNavyTick(si){
 /* Island grabs by transport: a multi-step state machine that abandons the mission
    if any phase stalls for a minute, so it cannot loop forever. */
 const AI_ISL_TO=60;
+const AI_ISL_TRAIN_TO=210; 
+
+const AI_ISL_ESC=2;      
+const AI_ISL_ESC_W=25;   
+const AI_ISL_ESC_DEF=2;  
+const AI_ISL_AVOID=TILE*11; 
+let AI_ISL_MIL=true;     
+function aiIslEsc(si,T){ 
+  const gT=tagsOf(si),out=[];
+  let room=transHold(T)-transUsed(T)-(UT.settler.vol||1);
+  for(const gi of [AI_G.reinf,AI_G.def]){
+    const pool=units.filter(u=>u.side===si&&isLandMil(u)&&u.grp===gT[gi]&&!u.boardTgt)
+      .sort((a,b)=>Math.hypot(a.x-T.x,a.y-T.y)-Math.hypot(b.x-T.x,b.y-T.y)); 
+    let avail=pool.length-(gi===AI_G.def?AI_ISL_ESC_DEF:0);
+    for(const u of pool){
+      if(out.length>=AI_ISL_ESC||avail<=0)break;
+      const v=UT[u.type].vol||1;if(v>room)continue;
+      out.push(u);room-=v;avail--;
+    }
+  }
+  return out;
+}
+function aiIsleFoe(si,comp){ 
+  if(!landComp)return false;
+  for(const b of buildings)if(b.side!==si&&b.hp>0&&landComp[idx(txOf(b.x),tyOf(b.y))]===comp&&aiKnowsB(si,b))return true;
+  for(const u of units)if(u.side!==si&&u.hp>0&&!u.gar&&u.dom!=='water'&&landComp[idx(txOf(u.x),tyOf(u.y))]===comp&&aiSeesU(si,u))return true;
+  return false;
+}
+function aiIsleFoePts(si,comp){ 
+  const out=[];if(!landComp)return out;
+  for(const b of buildings)if(b.side!==si&&b.hp>0&&landComp[idx(txOf(b.x),tyOf(b.y))]===comp&&aiKnowsB(si,b))out.push({x:b.x,y:b.y,s:0});
+  for(const u of units)if(u.side!==si&&u.hp>0&&!u.gar&&u.dom!=='water'&&landComp[idx(txOf(u.x),tyOf(u.y))]===comp&&aiSeesU(si,u))out.push({x:u.x,y:u.y,s:uStr(u)});
+  return out;}
+function aiIsleSafeSpot(si,su,node,comp){ 
+  const foes=aiIsleFoePts(si,comp);if(!foes.length)return null;
+  const dmin=(x,y)=>{let d=1e18;for(const f of foes)d=Math.min(d,Math.hypot(f.x-x,f.y-y));return d;};
+  const fp=fpOf('outpost'),ctx=txOf(su.x),cty=tyOf(su.y),R=DEPLOY_R;
+  let safe=null,sd=1e18,far=null,fd=-1;
+  for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){
+    const wx=(ctx+dx+0.5)*TILE,wy=(cty+dy+0.5)*TILE;
+    const tx=txOf(wx)-((fp.w/2)|0),ty=tyOf(wy)-((fp.h/2)|0);
+    if(tx<0||ty<0||tx+fp.w>TW||ty+fp.h>TH)continue;
+    if(Math.hypot((tx+fp.w/2)*TILE-su.x,(ty+fp.h/2)*TILE-su.y)>R*TILE)continue;   
+    if(landComp[idx(tx,ty)]!==comp)continue;
+    if(!canPlace('outpost',tx,ty,undefined,si))continue;                          
+    const df=dmin(wx,wy),dn=Math.hypot(wx-node.x,wy-node.y);
+    if(df>=AI_ISL_AVOID&&dn<sd){sd=dn;safe={x:wx,y:wy};}                          
+    if(df>fd){fd=df;far={x:wx,y:wy};}                                             
+  }
+  return safe||far;}
 function aiIslandStart(si){ 
   if(A(si).island||!AI_SEA.hasWater||!landComp)return;
   const hub=aiHub(si);if(!hub)return;
@@ -4824,7 +5478,8 @@ function aiIslandStart(si){
   let pick=null,pd=1e18;
   for(const o of AI_SEA.ores){
     if(o.comp===hc)continue; 
-    if(buildings.some(b=>b.hp>0&&landComp[idx(txOf(b.x),tyOf(b.y))]===o.comp))continue; 
+    if(buildings.some(b=>b.side===si&&b.hp>0&&landComp[idx(txOf(b.x),tyOf(b.y))]===o.comp))continue; 
+    if(aiIsleFoe(si,o.comp))continue; 
     for(const n of o.nodes){if(n.amt<=0)continue;
       const d=Math.hypot(n.x-hub.x,n.y-hub.y);if(d<pd){pd=d;pick={ore:o,node:n};}}
   }
@@ -4833,10 +5488,34 @@ function aiIslandStart(si){
   if(!land)return;
   A(si).island={phase:'train',pT:t,node:pick.node,land,T:null,su:null};
 }
-function aiIslandAbort(si){A(si).island=null;}
+function aiIslandAbort(si){
+  const m=A(si).island;
+  if(m){
+    for(const u of (m.esc||[]))if(u&&u.boardTgt===m.T)u.boardTgt=null;    
+    if(m.T&&m.T.hp>0&&m.T.cargo&&m.T.cargo.length&&!m.T.unloadPt){        
+      const hb=aiHub(si);if(hb)AICMD.unload(m.T,hb.x,hb.y);
+    }
+  }
+  A(si).island=null;
+}
+function aiIslandHold(si,m){ 
+  if(!landComp)return;
+  const ob=(m.su&&m.su.deployB&&m.su.deployB.hp>0&&buildings.indexOf(m.su.deployB)>=0)?m.su.deployB
+    :buildings.find(b=>b.side===si&&b.hp>0&&b.type==='outpost'&&Math.hypot(b.x-m.node.x,b.y-m.node.y)<TILE*8);
+  if(!ob)return;
+  const ic=landComp[idx(txOf(m.land.x),tyOf(m.land.y))];
+  const esc=(m.esc||[]).filter(u=>u&&u.hp>0&&!u.gar&&units.indexOf(u)>=0
+    &&landComp[idx(txOf(u.x),tyOf(u.y))]===ic);                       
+  if(!esc.length)return;
+  const gT=tagsOf(si);
+  for(const gi of [AI_G.reinf,AI_G.def])                              
+    AICMD.transferUnits(si,gi,AI_G.rgu,esc.filter(u=>u.grp===gT[gi]));
+  const rg=units.filter(u=>u.side===si&&isLandMil(u)&&u.grp===gT[AI_G.rgu]);
+  if(rg.length&&rg.every(u=>landComp[idx(txOf(u.x),tyOf(u.y))]===ic)&&ob.done)AICMD.garrison(si,AI_G.rgu,ob);
+}
 function aiIslandTick(si){
   const m=A(si).island;if(!m)return;
-  if(t-m.pT>AI_ISL_TO){aiIslandAbort(si);return;} 
+  if(t-m.pT>(m.phase==='train'?AI_ISL_TRAIN_TO:AI_ISL_TO)){aiIslandAbort(si);return;} 
   const ph=p=>{m.phase=p;m.pT=t;};
   const hub=aiHub(si),dock=buildings.find(b=>b.side===si&&b.done&&b.hp>0&&b.type==='dock');
   if(!hub||!dock){aiIslandAbort(si);return;}
@@ -4845,14 +5524,28 @@ function aiIslandTick(si){
   const stk=stockOf(si);
   if(m.phase==='train'){ 
     m.su=m.su||units.find(u=>u.side===si&&u.type==='settler'&&u.hp>0&&!u.deployB);
-    m.T=m.T||units.find(u=>u.side===si&&u.type==='transport'&&u.hp>0&&!u.cargo?.length);
-    if(!m.su&&!cqCount('settler',si)&&aiCanSpend(si,UT.settler.cost,null))AICMD.trainSettler(hub);
+    m.T=m.T||units.find(u=>u.side===si&&u.type==='transport'&&u.hp>0&&!u.cargo?.length&&!aiShipTaken(si,u)); 
+    
+    if(!m.su&&!cqCount('settler',si))
+      aiNeed(si,'isl:settler','exp',1.1,UT.settler.cost,
+        ()=>{const b=cqCount('settler',si);AICMD.trainSettler(hub);return cqCount('settler',si)>b;},
+        {gate:()=>techOf(si).age>=2&&units.filter(u=>u.type==='settler'&&u.side===si&&u.hp>0).length+cqCount('settler',si)<SETTLER_CAP});
     if(!m.T&&!buildings.some(b=>b.side===si&&b.queue.some(q=>q.type==='transport'))&&aiCanSpend(si,UT.transport.cost,null)&&dock.queue.length<2)AICMD.queueUnit(dock,'transport');
-    if(m.su&&m.T)ph('load');
+    if(m.su&&m.T){m.esc=aiIslEsc(si,m.T);ph('load');} 
     return;
   }
   if(m.phase==='load'){ 
-    if(m.su.gar===m.T){ph('sail');return;}
+    m.esc=(m.esc||[]).filter(u=>u.hp>0&&units.indexOf(u)>=0);
+    for(const u of m.esc)if(u.gar!==m.T&&!u.boardTgt)AICMD.boardUnit(si,u,m.T);   
+    if(m.su.gar===m.T){
+      const pend=m.esc.some(u=>u.gar!==m.T&&u.boardTgt===m.T);
+      if(!pend||t-m.pT>AI_ISL_ESC_W){
+        for(const u of m.esc)if(u.gar!==m.T)u.boardTgt=null;                      
+        m.esc=m.esc.filter(u=>u.gar===m.T);
+        ph('sail');
+      }
+      return;
+    }
     if(!m.su.boardTgt&&!AICMD.boardUnit(si,m.su,m.T)){aiIslandAbort(si);return;}
     return;
   }
@@ -4872,14 +5565,502 @@ function aiIslandTick(si){
   }
   if(m.phase==='deploy'){ 
     if(m.su.deployB||units.indexOf(m.su)<0){ 
-      if(units.indexOf(m.su)<0)A(si).island=null;else m.pT=t; 
+      if(units.indexOf(m.su)<0){aiIslandHold(si,m);A(si).island=null;}else m.pT=t; 
       return;
     }
-    if(!m.su.deployTgt&&!AICMD.deploySettler(m.su,m.node.x,m.node.y)){
-      const alt=landSpotsNear(m.node.x,m.node.y,6).find(s=>AICMD.deploySettler(m.su,s.x,s.y));
-      if(!alt)aiIslandAbort(si);
+    if(!m.su.deployTgt){
+      
+      const ic=landComp?landComp[idx(txOf(m.su.x),tyOf(m.su.y))]:-1;
+      const safe=(AI_ISL_MIL&&ic>=0&&aiIsleFoe(si,ic))?aiIsleSafeSpot(si,m.su,m.node,ic):null;
+      if(safe)m.foeIsle=true;                                        
+      if(!(safe&&AICMD.deploySettler(m.su,safe.x,safe.y))&&!AICMD.deploySettler(m.su,m.node.x,m.node.y)){
+        const alt=landSpotsNear(m.node.x,m.node.y,6).find(s=>AICMD.deploySettler(m.su,s.x,s.y));
+        if(!alt)aiIslandAbort(si);
+      }
     }
     return;
+  }
+}
+
+let AI_AMPH=true;                                    
+const AI_AMPH_TO={gather:330,load:90,sail:150,land:45}; 
+const AI_AMPH_ESC=2;     
+const AI_AMPH_MINS=6;    
+const AI_AMPH_MAXT=6;    
+const AI_AMPH_STALL=12;  
+const AI_AMPH_WAVE=2.2;  
+const AI_AMPH_CAPX=2.5;  
+const AI_AMPH_GO=1.4;    
+const AI_AMPH_GOT=0.7;   
+const AI_AMPH_FOER=TILE*11; 
+const AI_AMPH_KEEP=3;    
+const AI_AMPH_CD=25;     
+const aiAmphOn=si=>!!(AI_AMPH&&A(si).amph);          
+function aiPCompNear(x,y){ 
+  ensurePathComp();
+  const cx=txOf(x),cy=tyOf(y);
+  for(let r=0;r<=4;r++)for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+    if(Math.max(Math.abs(dx),Math.abs(dy))!==r)continue;
+    const nx=cx+dx,ny=cy+dy;if(nx<0||ny<0||nx>=TW||ny>=TH)continue;
+    const c=pathCompL[idx(nx,ny)];if(c>=0)return c;
+  }
+  return -1;}
+function aiCrossWater(si){ 
+  if(!AI_SEA.hasWater)return false;
+  const hub=aiHub(si),cc=aiFoeCC(si);if(!hub||!cc)return false;
+  const hc=aiPCompNear(hub.x,hub.y),cy=aiPCompNear(cc.x,cc.y);
+  return hc>=0&&cy>=0&&hc!==cy;}
+function aiAshore(si){ 
+  if(!AI_SEA.hasWater)return null;
+  const hub=aiHub(si);if(!hub)return null;
+  const g=tagsOf(si)[AI_G.main];
+  const au=units.filter(u=>u.side===si&&isLandMil(u)&&u.grp===g&&!u.gar);
+  if(!au.length)return null;
+  const by=new Map();
+  for(const u of au){const c=aiPCompNear(u.x,u.y);if(c<0)continue;
+    const e=by.get(c)||{s:0,x:0,y:0,n:0};const w=uStr(u);e.s+=w;e.x+=u.x*w;e.y+=u.y*w;e.n++;by.set(c,e);}
+  let bc=-1,be=null;
+  for(const [c,e] of by)if(!be||e.s>be.s||(e.s===be.s&&c<bc)){bc=c;be=e;}   
+  if(bc<0)return null;
+  const hc=aiPCompNear(hub.x,hub.y);
+  return (hc>=0&&hc!==bc)?{c:bc,cx:be.x/be.s,cy:be.y/be.s,str:+be.s.toFixed(1),n:be.n}:null;}
+function aiCityN(si){ 
+  let n=0;for(const b of buildings)if(b.side===si&&b.hp>0&&b.done&&b.type==='city')n++;return n;}
+function aiTbackReach(si,cx,cy,hub){ 
+  const budget=AI_TBACK*AI_TBACK_SP;                       
+  if(Math.hypot(cx-hub.x,cy-hub.y)>budget)return false;    
+  const c0=aiPCompNear(cx,cy),c1=aiPCompNear(hub.x,hub.y);
+  if(c0<0||c1<0||c0!==c1)return false;                     
+  const p=findPath(cx,cy,hub.x,hub.y,si,false,'land');
+  if(!p.length||fpCross)return false;                      
+  let d=0,px=cx,py=cy;
+  for(const w of p){d+=Math.hypot(w.x-px,w.y-py);px=w.x;py=w.y;if(d>budget)return false;}
+  return true;}
+function aiTgtInComp(si,ash){ 
+  let best=null,bd=1e18;
+  for(const b of buildings){
+    if(b.side===si||b.hp<=0||!aiKnowsB(si,b))continue;
+    if(aiPCompNear(b.x,b.y)!==ash.c)continue;
+    const d=Math.hypot(b.x-ash.cx,b.y-ash.cy);
+    if(d<bd){bd=d;best=b;}}
+  return best;}
+function aiAmphTgt(si){ 
+  if(!AI_SEA.hasWater)return null;
+  const hub=aiHub(si);if(!hub)return null;
+  const hc=aiPCompNear(hub.x,hub.y);if(hc<0)return null;
+  const b=aiWaveTarget(si)||aiFoeCC(si);              
+  if(!b||b.hp<=0)return null;
+  const bc=aiPCompNear(b.x,b.y);
+  if(bc<0||bc===hc)return null;
+  return b;}
+function aiFoeMass(si){ 
+  const pts=[];
+  for(const b of buildings)if(b.side!==si&&b.hp>0&&BT[b.type].cc&&aiKnowsB(si,b))pts.push({x:b.x,y:b.y});
+  let sx=0,sy=0,ss=0;
+  for(const u of units)if(u.side!==si&&isLandMil(u)&&!u.gar&&aiSeesU(si,u)){const s=uStr(u);sx+=u.x*s;sy+=u.y*s;ss+=s;}
+  if(ss>0)pts.push({x:sx/ss,y:sy/ss});
+  return pts;}
+function aiBeachSpot(si,tgt,wc){ 
+  ensurePathComp();
+  const tc=aiPCompNear(tgt.x,tgt.y);if(tc<0)return null;
+  const dm=dmaskOf(si);
+  const foe=aiFoeMass(si);
+  for(let pass=0;pass<2;pass++){                      
+    if(pass===1&&!foe.length)break;                   
+    let best=null,bs=1e18;
+    for(let ty=0;ty<TH;ty++)for(let tx=0;tx<TW;tx++){
+      const i=idx(tx,ty);
+      if(pathCompL[i]!==tc)continue;                  
+      const x=(tx+0.5)*TILE,y=(ty+0.5)*TILE,d=Math.hypot(x-tgt.x,y-tgt.y);
+      if(d>=bs)continue;                              
+      if(dm[i])continue;                              
+      if(pass===0&&foe.some(p=>Math.hypot(p.x-x,p.y-y)<AI_AMPH_FOER))continue; 
+      let w=null;
+      for(const [nx,ny] of [[tx-1,ty],[tx+1,ty],[tx,ty-1],[tx,ty+1]]){
+        if(nx<0||ny<0||nx>=TW||ny>=TH)continue;const ni=idx(nx,ny);
+        if(terr[ni]!==T_WATER||blocked[ni]||pathCompW[ni]!==wc)continue; 
+        w={x:(nx+0.5)*TILE,y:(ny+0.5)*TILE};break;}
+      if(!w)continue;
+      let hot=false;                                  
+      for(const b of buildings){
+        if(b.side===si||b.hp<=0||!aiKnowsB(si,b))continue;
+        const fr=defFireRange(b);
+        if(fr>0&&Math.hypot(b.x-x,b.y-y)<fr+TILE*1.5){hot=true;break;}}
+      if(hot)continue;
+      bs=d;best={x,y,w};
+    }
+    if(best)return best;
+  }
+  return null;}
+function aiAmphStart(si){ 
+  const a=A(si);
+  if(!AI_AMPH||a.amph||!AI_SEA.hasWater)return;
+  if(aiIslWarOn(si))return;                                             
+  if(t<(a.amphT||-1e9)+AI_AMPH_CD)return;
+  const hub=aiHub(si);if(!hub)return;
+  if(a.thr&&Math.hypot(a.thr.x-hub.x,a.thr.y-hub.y)<TILE*9)return;      
+  const dock=buildings.find(b=>b.side===si&&b.done&&b.hp>0&&b.type==='dock');if(!dock)return;
+  const lp=dockLaunch(dock)||nearestWaterXY(dock.x,dock.y);if(!lp)return;
+  ensurePathComp();
+  const wc=pathCompW[idx(txOf(lp.x),tyOf(lp.y))];if(wc<0)return;
+  const gT=tagsOf(si);
+  const tgt=aiAmphTgt(si);if(!tgt)return;
+  
+  {const hc0=aiPCompNear(hub.x,hub.y);
+   const stranded=units.filter(u=>u.side===si&&isLandMil(u)&&u.grp===gT[AI_G.main]&&!u.gar&&aiPCompNear(u.x,u.y)===hc0);
+   if(stranded.length){                                                  
+     AICMD.transferUnits(si,AI_G.main,AI_G.reinf,stranded);
+     if(!units.some(u=>u.side===si&&isLandMil(u)&&u.grp===gT[AI_G.main]&&!u.gar)){a.atkOut=false;a.atkTgt=null;a.atkMode='march';a.staged=false;a.stageT=0;}
+   }}
+  const res=units.filter(u=>u.side===si&&isLandMil(u)&&u.grp===gT[AI_G.reinf]&&!u.gar);
+  
+  if(res.reduce((s,u)=>s+uStr(u),0)<Math.max(AI_AMPH_MINS,(a.waveReq||0)*AI_AMPH_GO))return;
+  const beach=aiBeachSpot(si,tgt,wc);if(!beach)return;
+  a.amph={phase:'gather',pT:t,tgt,beach,wc,T:[],landed:0};
+}
+function aiAmphAbort(si){const a=A(si);if(!a.amph)return;a.amph=null;a.amphT=t;}
+function aiAmphTick(si){
+  const a=A(si),m=a.amph;if(!m)return;
+  const ph=p=>{m.phase=p;m.pT=t;};
+  if(t-m.pT>(AI_AMPH_TO[m.phase]||60)){aiAmphAbort(si);return;}          
+  const hub=aiHub(si);if(!hub){aiAmphAbort(si);return;}
+  const dock=buildings.find(b=>b.side===si&&b.done&&b.hp>0&&b.type==='dock');
+  if(!dock&&m.phase!=='land'){aiAmphAbort(si);return;}                   
+  if(a.thr&&Math.hypot(a.thr.x-hub.x,a.thr.y-hub.y)<TILE*9&&(m.phase==='gather'||m.phase==='load')){aiAmphAbort(si);return;} 
+  if(m.tgt.hp<=0){                                                        
+    const nt=aiAmphTgt(si);
+    if(!nt||aiPCompNear(nt.x,nt.y)!==aiPCompNear(m.beach.x,m.beach.y)){aiAmphAbort(si);return;}
+    m.tgt=nt;
+  }
+  m.T=m.T.filter(T=>T.hp>0&&units.indexOf(T)>=0);                        
+  const gT=tagsOf(si);
+  const esc=units.filter(u=>u.side===si&&isNavyMil(u));
+  if(m.phase==='gather'){
+    
+    const res=units.filter(u=>u.side===si&&isLandMil(u)&&u.grp===gT[AI_G.reinf]&&!u.gar);
+    const vol=res.reduce((s,u)=>s+(UT[u.type].vol||1),0);
+    const idleT=units.filter(u=>u.side===si&&u.type==='transport'&&u.hp>0&&!(u.cargo&&u.cargo.length)&&!(A(si).island&&A(si).island.T===u)&&!(A(si).islw&&A(si).islw.T.indexOf(u)>=0));
+    const needT=Math.max(1,Math.min(AI_AMPH_MAXT,Math.ceil(vol/Math.max(1,transHold({type:'transport',side:si})))));
+    m.T=idleT.slice(0,needT);
+    const qT=buildings.reduce((n,b)=>n+(b.side===si?b.queue.filter(q=>q.type==='transport').length:0),0);
+    if(m.T.length<needT&&!qT&&dock.queue.length<2&&aiCanSpend(si,UT.transport.cost,null))AICMD.queueUnit(dock,'transport');
+    
+    const late0=t-m.pT>AI_AMPH_TO.gather*AI_AMPH_GOT;
+    const needTe=late0?Math.max(1,Math.min(needT,m.T.length)):needT;
+    const lp=dockLaunch(dock)||nearestWaterXY(dock.x,dock.y);
+    const shore=lp?landSpotsNear(lp.x,lp.y,1)[0]:null;
+    if(shore)aiOrder(si,AI_G.reinf,shore.x,shore.y,'guard');             
+    m.emb=shore||null;
+    
+    const near=shore?res.filter(u=>Math.hypot(u.x-shore.x,u.y-shore.y)<TILE*8):[];
+    
+    const needS=Math.max(AI_AMPH_MINS,(A(si).waveReq||0)*(late0?AI_AMPH_GO:AI_AMPH_WAVE));
+    m.needS=+needS.toFixed(1);
+    if(m.T.length>=needTe&&esc.length>=AI_AMPH_ESC
+       &&near.reduce((s,u)=>s+uStr(u),0)>=needS
+       &&near.length>=res.length*0.7)ph('load');
+    return;
+  }
+  if(m.phase==='load'){
+    if(!m.T.length){aiAmphAbort(si);return;}
+    for(const T of m.T)AICMD.board(si,AI_G.reinf,T);                     
+    const aboard=m.T.reduce((s,T)=>s+(T.cargo||[]).reduce((k,u)=>k+uStr(u),0),0);
+    const pend=units.some(u=>u.side===si&&u.hp>0&&!u.gar&&u.boardTgt&&m.T.indexOf(u.boardTgt)>=0);
+    if(m.ab===undefined||aboard>m.ab){m.ab=aboard;m.abT=t;}                
+    
+    if(aboard>=AI_AMPH_MINS&&(!pend||t-m.abT>AI_AMPH_STALL)){ph('sail');return;}
+    if(!pend&&aboard<=0&&t-m.pT>15){aiAmphAbort(si);return;}             
+    return;
+  }
+  if(m.phase==='sail'){
+    const laden=m.T.filter(T=>T.cargo&&T.cargo.length);
+    if(!laden.length){aiAmphAbort(si);return;}                          
+    const w=m.beach.w;
+    let arr=0;
+    for(const T of laden){
+      if(Math.hypot(T.x-w.x,T.y-w.y)<TILE*2.4){arr++;continue;}
+      if(!T.path.length)AICMD.moveShip(si,T,w.x,w.y);                    
+    }
+    if(arr>=laden.length)ph('land');
+    return;
+  }
+  if(m.phase==='land'){
+    const laden=m.T.filter(T=>T.cargo&&T.cargo.length);
+    if(laden.length){
+      for(const T of laden)if(!T.unloadPt)AICMD.unload(T,m.beach.x,m.beach.y);
+      return;
+    }
+    
+    const bc=aiPCompNear(m.beach.x,m.beach.y);
+    const landed=units.filter(u=>u.side===si&&isLandMil(u)&&u.grp===gT[AI_G.reinf]&&!u.gar&&aiPCompNear(u.x,u.y)===bc);
+    m.landed=AICMD.transferUnits(si,AI_G.reinf,AI_G.main,landed);
+    if(!m.landed){aiAmphAbort(si);return;}                                
+    a.atkOut=true;a.atkTgt=m.tgt;a.atkMode='march';a.waveT=t;a.resDep=false;a.offAcc=0;a.staged=false;a.stageT=0;a.mfT=0;
+    const lp=dock?(dockLaunch(dock)||nearestWaterXY(dock.x,dock.y)):null;
+    if(lp)for(const T of m.T)if(T.hp>0)AICMD.moveShip(si,T,lp.x,lp.y);   
+    a.amph=null;a.amphT=t;
+    return;
+  }
+}
+
+let AI_ISL_WAR=true;      
+const AI_ISL_WAR_K=1.6;   
+const AI_ISL_WAR_MAX=25;  
+const AI_ISL_WAR_MAXT=2;  
+const AI_ISL_WAR_TO={gather:240,load:90,sail:150,land:45,fight:300,send:150,pick:90,home:180,drop:45}; 
+const AI_ISL_WAR_CD=45;   
+const AI_ISL_FAIL_N=3;    
+const AI_ISL_FAIL_CD=270; 
+const AI_ISL_SHARE=0.5;   
+const AI_ISL_FERRY=6;     
+const aiIslWarOn=si=>{const m=A(si).islw;return !!(AI_ISL_WAR&&m&&m.mode==='out'&&m.phase!=='fight');}; 
+const aiShipTaken=(si,u)=>{const a=A(si);                            
+  return !!((a.island&&a.island.T===u)||(a.amph&&a.amph.T.indexOf(u)>=0)||(a.islw&&a.islw.T.indexOf(u)>=0));};
+function aiIsleFoeStr(si,comp){ 
+  let s=0;for(const p of aiIsleFoePts(si,comp))s+=p.s;return +s.toFixed(1);}
+function aiIslWarTgt(si){ 
+  const hub=aiHub(si);if(!hub||!landComp)return null;
+  const hc=landComp[idx(txOf(hub.x),tyOf(hub.y))];
+  const cc=aiFoeCC(si);
+  const ec=cc?landComp[idx(txOf(cc.x),tyOf(cc.y))]:-1;
+  const cand=new Map();                                              
+  for(const o of AI_SEA.ores){
+    if(o.comp===hc||o.comp===ec||cand.has(o.comp))continue;
+    const n=o.nodes.find(n=>n.amt>0)||o.nodes[0];if(n)cand.set(o.comp,{x:n.x,y:n.y});
+  }
+  for(const b of buildings){                                         
+    if(b.side!==si||b.hp<=0)continue;
+    const c=landComp[idx(txOf(b.x),tyOf(b.y))];
+    if(c<0||c===hc||c===ec)continue;
+    cand.set(c,{x:b.x,y:b.y});
+  }
+  const fl=A(si).islFail||{};
+  let best=null,bd=1e18;
+  for(const [c,pt] of cand){
+    const f=fl[c];if(f&&t<(f.cd||-1e9))continue;                     
+    if(!aiIsleFoe(si,c))continue;                                    
+    const fs=aiIsleFoeStr(si,c);
+    if(fs>AI_ISL_WAR_MAX)continue;
+    const d=Math.hypot(pt.x-hub.x,pt.y-hub.y);
+    if(d<bd){bd=d;best={comp:c,pt,need:+Math.max(AI_AMPH_MINS,fs*AI_ISL_WAR_K).toFixed(1)};}
+  }
+  return best;}
+function aiIslFerryPick(si){ 
+  const gT=tagsOf(si),hub=aiHub(si);if(!hub||!landComp)return null;
+  const hc=landComp[idx(txOf(hub.x),tyOf(hub.y))];
+  const by=new Map();
+  for(const u of units){
+    if(u.side!==si||u.hp<=0||u.gar||!isLandMil(u)||u.grp!==gT[AI_G.rgu])continue;
+    const c=landComp[idx(txOf(u.x),tyOf(u.y))];if(c<0||c===hc)continue;
+    const e=by.get(c)||{s:0,x:0,y:0,n:0};e.s+=uStr(u);e.x+=u.x;e.y+=u.y;e.n++;by.set(c,e);
+  }
+  let bc=-1,be=null;
+  for(const [c,e] of by){
+    if(e.s<AI_ISL_FERRY)continue;
+    if(aiIsleFoe(si,c))continue;                                     
+    if(!be||e.s>be.s||(e.s===be.s&&c<bc)){bc=c;be=e;}
+  }
+  return bc<0?null:{comp:bc,pt:{x:be.x/be.n,y:be.y/be.n}};}
+function aiIslWarStart(si){
+  const a=A(si);
+  if(!AI_ISL_WAR||!AI_SQUADS||a.islw||!AI_SEA.hasWater||!landComp)return; 
+  if(a.amph)return;                                                  
+  if(t<(a.islwT||-1e9)+AI_ISL_WAR_CD)return;
+  const hub=aiHub(si);if(!hub)return;
+  if(a.thr&&Math.hypot(a.thr.x-hub.x,a.thr.y-hub.y)<TILE*9)return;    
+  const dock=buildings.find(b=>b.side===si&&b.done&&b.hp>0&&b.type==='dock');if(!dock)return;
+  const lp=dockLaunch(dock)||nearestWaterXY(dock.x,dock.y);if(!lp)return;
+  ensurePathComp();
+  const wc=pathCompW[idx(txOf(lp.x),tyOf(lp.y))];if(wc<0)return;
+  const back=aiIslFerryPick(si);                                     
+  if(back){
+    const bp=aiBeachSpot(si,back.pt,wc);if(!bp)return;                
+    a.islw={mode:'back',phase:'send',pT:t,comp:back.comp,land:{x:bp.x,y:bp.y},w:bp.w,T:[],force:[]};
+    return;
+  }
+  const tg=aiIslWarTgt(si);if(!tg)return;
+  const gT=tagsOf(si);
+  const res=units.filter(u=>u.side===si&&isLandMil(u)&&u.grp===gT[AI_G.reinf]&&!u.gar);
+  const resStr=res.reduce((s,u)=>s+uStr(u),0);
+  
+  const share=(AI_AMPH&&aiAmphTgt(si))?AI_ISL_SHARE:1;
+  if(resStr<tg.need||tg.need>resStr*share)return;
+  const beach=aiBeachSpot(si,tg.pt,wc);if(!beach)return;
+  a.islw={mode:'out',phase:'gather',pT:t,comp:tg.comp,need:tg.need,beach,T:[],force:[]};
+}
+function aiIslWarEnd(si,fail){ 
+  const a=A(si),m=a.islw;
+  if(m){
+    for(const u of (m.force||[]))if(u&&u.boardTgt&&m.T.indexOf(u.boardTgt)>=0)u.boardTgt=null; 
+    for(const T of m.T)if(T&&T.hp>0&&T.cargo&&T.cargo.length&&!T.unloadPt){        
+      const hb=aiHub(si);if(hb)AICMD.unload(T,hb.x,hb.y);
+    }
+    if(fail&&m.comp!==undefined){
+      const own=buildings.some(b=>b.side===si&&b.hp>0&&landComp&&landComp[idx(txOf(b.x),tyOf(b.y))]===m.comp);
+      a.islFail=a.islFail||{};
+      const f=a.islFail[m.comp]||{n:0,cd:-1e9};
+      f.n++;
+      if(f.n>=AI_ISL_FAIL_N&&!own){f.cd=t+AI_ISL_FAIL_CD;f.n=0;}      
+      a.islFail[m.comp]=f;
+    }else if(fail===false&&m.comp!==undefined&&a.islFail&&a.islFail[m.comp])a.islFail[m.comp].n=0; 
+  }
+  a.islw=null;a.islwT=t;
+}
+function aiIslWarTick(si){
+  const a=A(si),m=a.islw;if(!m)return;
+  if(t-m.pT>(AI_ISL_WAR_TO[m.phase]||60)){aiIslWarEnd(si,m.mode==='out'&&m.phase==='fight'&&aiIsleFoe(si,m.comp));return;}
+  const ph=p=>{m.phase=p;m.pT=t;};
+  const hub=aiHub(si);if(!hub){aiIslWarEnd(si);return;}
+  const dock=buildings.find(b=>b.side===si&&b.done&&b.hp>0&&b.type==='dock');
+  const lp=dock?(dockLaunch(dock)||nearestWaterXY(dock.x,dock.y)):null;
+  m.T=m.T.filter(T=>T.hp>0&&units.indexOf(T)>=0);                     
+  m.force=(m.force||[]).filter(u=>u.hp>0&&units.indexOf(u)>=0);
+  const gT=tagsOf(si);
+  const needT=()=>{                                              
+    const idle=units.filter(u=>u.side===si&&u.type==='transport'&&u.hp>0&&!(u.cargo&&u.cargo.length)&&!aiShipTaken(si,u));
+    if(m.T.length<AI_ISL_WAR_MAXT&&idle.length)m.T=m.T.concat(idle.slice(0,AI_ISL_WAR_MAXT-m.T.length));
+    if(!m.T.length&&dock&&!buildings.some(b=>b.side===si&&b.queue.some(q=>q.type==='transport'))
+      &&dock.queue.length<2&&aiCanSpend(si,UT.transport.cost,null))AICMD.queueUnit(dock,'transport');
+    return m.T.length>0;
+  };
+  if(m.mode==='out'){
+    if(m.phase==='gather'){
+      if(!dock||!lp){aiIslWarEnd(si);return;}
+      if(!needT())return;
+      const shore=landSpotsNear(lp.x,lp.y,1)[0];
+      if(shore)aiOrder(si,AI_G.reinf,shore.x,shore.y,'guard');        
+      const res=units.filter(u=>u.side===si&&isLandMil(u)&&u.grp===gT[AI_G.reinf]&&!u.gar);
+      const near=shore?res.filter(u=>Math.hypot(u.x-shore.x,u.y-shore.y)<TILE*8):[];
+      const late=t-m.pT>AI_ISL_WAR_TO.gather*AI_AMPH_GOT;             
+      const want=late?Math.max(AI_AMPH_MINS,m.need*0.7):m.need;
+      if(near.reduce((s,u)=>s+uStr(u),0)<want)return;
+      
+      let room=m.T.reduce((s,T)=>s+transHold(T)-transUsed(T),0),got=0;
+      const pick=[];
+      for(const u of near.slice().sort((p,q)=>Math.hypot(p.x-shore.x,p.y-shore.y)-Math.hypot(q.x-shore.x,q.y-shore.y))){
+        if(got>=want)break;const v=UT[u.type].vol||1;if(v>room)continue;
+        pick.push(u);room-=v;got+=uStr(u);
+      }
+      if(!pick.length)return;
+      m.force=pick;m.want=+got.toFixed(1);ph('load');
+      return;
+    }
+    if(m.phase==='load'){
+      if(!m.T.length||!m.force.length){aiIslWarEnd(si,true);return;}
+      for(const u of m.force)if(!u.gar&&!u.boardTgt)for(const T of m.T){if(AICMD.boardUnit(si,u,T))break;}
+      const aboard=m.force.filter(u=>u.gar&&m.T.indexOf(u.gar)>=0).reduce((s,u)=>s+uStr(u),0);
+      const pend=m.force.some(u=>!u.gar&&u.boardTgt&&m.T.indexOf(u.boardTgt)>=0);
+      if(m.ab===undefined||aboard>m.ab){m.ab=aboard;m.abT=t;}          
+      if(aboard>0&&(!pend||t-m.abT>AI_AMPH_STALL)){
+        for(const u of m.force)if(!u.gar)u.boardTgt=null;              
+        m.force=m.force.filter(u=>u.gar&&m.T.indexOf(u.gar)>=0);
+        m.T=m.T.filter(T=>T.cargo&&T.cargo.length);
+        ph('sail');
+      }
+      else if(!pend&&aboard<=0&&t-m.pT>15){aiIslWarEnd(si,true);}      
+      return;
+    }
+    if(m.phase==='sail'){
+      const laden=m.T.filter(T=>T.cargo&&T.cargo.length);
+      if(!laden.length){aiIslWarEnd(si,true);return;}
+      let arr=0;
+      for(const T of laden){
+        if(Math.hypot(T.x-m.beach.w.x,T.y-m.beach.w.y)<TILE*2.4){arr++;continue;}
+        if(!T.path.length)AICMD.moveShip(si,T,m.beach.w.x,m.beach.w.y);
+      }
+      if(arr>=laden.length)ph('land');
+      return;
+    }
+    if(m.phase==='land'){
+      const laden=m.T.filter(T=>T.cargo&&T.cargo.length);
+      if(laden.length){for(const T of laden)if(!T.unloadPt)AICMD.unload(T,m.beach.x,m.beach.y);return;}
+      
+      const landed=units.filter(u=>u.side===si&&isLandMil(u)&&u.grp===gT[AI_G.reinf]&&!u.gar
+        &&landComp&&landComp[idx(txOf(u.x),tyOf(u.y))]===m.comp);
+      const n=AICMD.transferUnits(si,AI_G.reinf,AI_G.rgu,landed);
+      if(lp)for(const T of m.T)if(T.hp>0)AICMD.moveShip(si,T,lp.x,lp.y); 
+      if(!n){aiIslWarEnd(si,true);return;}                              
+      m.T=[];ph('fight');
+      return;
+    }
+    if(m.phase==='fight'){ 
+      if(!aiIsleFoe(si,m.comp)){aiIslWarEnd(si,false);return;}
+      const alive=units.some(u=>u.side===si&&isLandMil(u)&&u.hp>0&&!u.gar&&landComp&&landComp[idx(txOf(u.x),tyOf(u.y))]===m.comp);
+      if(!alive)aiIslWarEnd(si,true);
+      return;
+    }
+    return;
+  }
+  
+  if(m.phase==='send'){
+    if(!dock||!lp){aiIslWarEnd(si);return;}
+    if(!needT())return;
+    for(const T of m.T){
+      if(Math.hypot(T.x-m.w.x,T.y-m.w.y)<TILE*2.4){ph('pick');return;}
+      if(!T.path.length)AICMD.moveShip(si,T,m.w.x,m.w.y);
+    }
+    return;
+  }
+  if(m.phase==='pick'){
+    const T=m.T[0];if(!T){aiIslWarEnd(si);return;}
+    const on=units.filter(u=>u.side===si&&isLandMil(u)&&u.hp>0&&!u.gar&&u.grp===gT[AI_G.rgu]
+      &&landComp&&landComp[idx(txOf(u.x),tyOf(u.y))]===m.comp);
+    for(const u of on)if(!u.boardTgt)AICMD.boardUnit(si,u,T);
+    const aboard=(T.cargo||[]).length;
+    const pend=on.some(u=>u.boardTgt===T);
+    if(m.ab===undefined||aboard>m.ab){m.ab=aboard;m.abT=t;}
+    if(aboard>0&&(!pend||t-m.abT>AI_AMPH_STALL)){
+      for(const u of on)if(!u.gar)u.boardTgt=null;
+      ph('home');
+    }
+    else if(!pend&&aboard<=0&&t-m.pT>15)aiIslWarEnd(si);
+    return;
+  }
+  if(m.phase==='home'){
+    if(!lp){aiIslWarEnd(si);return;}
+    const laden=m.T.filter(T=>T.cargo&&T.cargo.length);
+    if(!laden.length){aiIslWarEnd(si);return;}
+    let arr=0;
+    for(const T of laden){
+      if(Math.hypot(T.x-lp.x,T.y-lp.y)<TILE*2.4){arr++;continue;}
+      if(!T.path.length)AICMD.moveShip(si,T,lp.x,lp.y);
+    }
+    if(arr>=laden.length)ph('drop');
+    return;
+  }
+  if(m.phase==='drop'){
+    const laden=m.T.filter(T=>T.cargo&&T.cargo.length);
+    if(!laden.length){aiIslWarEnd(si);return;}                         
+    const shore=lp?(landSpotsNear(lp.x,lp.y,1)[0]||hub):hub;
+    for(const T of laden)if(!T.unloadPt)AICMD.unload(T,shore.x,shore.y);
+    return;
+  }
+}
+function aiIslForceTick(si){ 
+  const gT=tagsOf(si),g=gT[AI_G.rgu];
+  const us=units.filter(u=>u.side===si&&isLandMil(u)&&u.grp===g&&u.hp>0&&!u.gar);
+  if(!us.length)return;
+  const hub=aiHub(si);if(!hub||!landComp)return;
+  const hc=landComp[idx(txOf(hub.x),tyOf(hub.y))];
+  const home=us.filter(u=>landComp[idx(txOf(u.x),tyOf(u.y))]===hc);
+  if(home.length)AICMD.transferUnits(si,AI_G.rgu,AI_G.reinf,home);      
+  const rest=us.filter(u=>home.indexOf(u)<0);
+  if(!rest.length)return;
+  const by=new Map();
+  for(const u of rest){const c=landComp[idx(txOf(u.x),tyOf(u.y))];if(c<0)continue;
+    const e=by.get(c)||{s:0,n:0};e.s+=uStr(u);e.n++;by.set(c,e);}
+  if(by.size!==1)return;                                                
+  let bc=-1;for(const [c] of by)bc=c;
+  const m=A(si).islw;
+  if(m&&m.mode==='back'&&m.comp===bc&&(m.phase==='pick'||m.phase==='home'))return; 
+  const foes=aiIsleFoePts(si,bc);
+  if(foes.length){
+    let sx=0,sy=0,ss=0;
+    for(const f of foes){const w=Math.max(0.5,f.s);sx+=f.x*w;sy+=f.y*w;ss+=w;} 
+    aiOrder(si,AI_G.rgu,sx/ss,sy/ss,'attack');
+  }else{
+    const ob=buildings.find(b=>b.side===si&&b.hp>0&&landComp[idx(txOf(b.x),tyOf(b.y))]===bc);
+    if(ob)aiOrder(si,AI_G.rgu,ob.x,ob.y,'guard');                       
   }
 }
 /* ============ 9c. AI military brain ============
@@ -4896,7 +6077,8 @@ const AI_MILCAP={develop:8,defend:10,pressure:14,allin:22};
    for running whole games of AI against AI. */
 const AI_T={eco:2,strat:10,mil:1.2,navy:2}; 
 function mkAiState(si){return {i:si,state:'develop',sT:0,routes:[],routesT:-1e9,mission:null,retreatT:-1e9,ord:[],foeSeen:{},homeRally:null,clearT:99,breach:null,
-  navyRetreatT:-1e9,island:null,                       
+  navyRetreatT:-1e9,island:null,amph:null,amphT:-1e9,  
+  islw:null,islwT:-1e9,islFail:{},                     
   intelT:-1e9,                                         
   foeNewT:-1e9,scoutDeaths:0,intelBy:{},incoming:null, 
   pool:[],cmt:[],lastGath:null,                        
@@ -4993,13 +6175,15 @@ function aiSetDiff(si,lv){
   a.reinfDep=false;a.harOut=false;a.harTgt=null;a.harLeg=null;a.rguPt=null;a.healHold=0;a.harPure=false; 
   a.escHold=0;a.escCd=-1e9;a.reHold=0;a.reCd=-1e9;a.sgRetr=0;a.sgRetrPt=null;a.regrp=0;a.regrpPt=null; 
   a.atkOut=false;a.atkTgt=null;a.atkMode='march';a.muster=0;a.musterPt=null;a.resDep=false;a.tbackOn=false; 
+  a.amph=null;a.amphT=-1e9;                                                                                
   for(const ti of [AI_G.main,AI_G.def,AI_G.pat,AI_G.sieg,AI_G.reinf,AI_G.rgu,AI_G.har]) 
     AICMD.setRule(si,ti,d.tgtSel==='none'?'nearest':'counter');
   aiDraw(si);return lv;}
 function aiResetBrain(si){ 
   const a=A(si);
   a.state='develop';a.sT=t;a.retreatT=-1e9;a.navyRetreatT=-1e9;a.mission=null;a.clearT=99;a.harassT=-1e9;
-  a.island=null;a.routes=[];a.routesT=-1e9;a.breach=null;a.ord.length=0;AI_SEA.ready=false;
+  a.island=null;a.amph=null;a.amphT=-1e9;a.islw=null;a.islwT=-1e9;a.islFail={}; 
+  a.routes=[];a.routesT=-1e9;a.breach=null;a.ord.length=0;AI_SEA.ready=false; 
   a.thr=null;a.defAcc=0;a.wall=null;a.had={};a.harassAt={}; 
   a.pool.length=0;a.cmt.length=0;a.lastGath=null;           
   a.feat=null;a.featT=-1e9;a.marchC=null;a.marchSrc=null;    
@@ -5187,6 +6371,9 @@ const AI_MUSTER_WAIT=30;
 let AI_NORETREAT=true;      
 const AI_TBACK=15;          
 const AI_TBACK_R=TILE*18;   
+const AI_TBACK_SP=48;       
+let AI_TBACK_PATH=true;     
+let AI_TBACK_BACKUP=true;   
 const AI_CLUSTER_R=TILE*18; 
 /* The launch threshold is tied to the all-in army size, so it is by construction
    reachable: the same cap governs production, meaning the threshold can never
@@ -5225,6 +6412,8 @@ const AI_RG_F=0.5;
 const AI_RG_C=0.3;          
 let AI_OUTGAP=true;         
 const AI_OUT_GAP=10;        
+const AI_EXP_DROP=18;       
+const AI_EXP_VILL=2;        
 let AI_TWRGAP=true;         
 let AI_PATROLFIX=true;      
 let AI_OUTBAR=true;         
@@ -6405,7 +7594,12 @@ function aiMilProdSquads(myU,T,stk,si){
   const harWant=(AI_HARASS4&&d.harass&&atkResStr>=(a.waveReq||8)*AI_MAIN_LINE)?((MB&&unitUnlocked(MB,si))?{[MB]:AI_H4_N}:{[F]:1,[R]:1}):{};
   
   if(AI_BUCKWAR){if(atkResStr<(a.waveReq||8)*0.5)a.bWar=true;else if(atkResStr>=(a.waveReq||8))a.bWar=false;}else a.bWar=false;
-  const want=aiMilWant(T,st,si,aiMilCap(si,'allin'));                             
+  
+  const resCap=(AI_AMPH&&AI_SEA.hasWater&&aiCrossWater(si))
+    ?Math.min(aiMilCap(si,'allin')*AI_AMPH_CAPX,aiSupplyCap(si))
+    :aiMilCap(si,'allin');
+  a.resCap=+resCap.toFixed(1);                                                     
+  const want=aiMilWant(T,st,si,resCap);
   const haveG=Array.from({length:8},()=>({}));
   for(const u of myU){const gi=gT.indexOf(u.grp);if(gi>=0)haveG[gi][u.type]=(haveG[gi][u.type]||0)+1;}
   for(const b of buildings)if(b.side===si&&b.hp>0)for(const q of b.queue)if(q.tag<8)haveG[q.tag][q.type]=(haveG[q.tag][q.type]||0)+1;
@@ -6439,7 +7633,12 @@ function aiMilProdSquads(myU,T,stk,si){
     {let ok=true;for(const k in c)if((stk[k]||0)<c[k]){ok=false;break;}if(!ok)continue;}
     const b=buildings.find(o=>o.side===si&&o.done&&o.hp>0&&o.type===UT[pick].bld&&o.queue.length<2);
     if(!b)continue;
-    AICMD.setProdTag(si,b,gi);AICMD.queueUnit(b,pick);
+    
+    let gq=gi;
+    if(AI_ISL_WAR&&landComp&&AI_SEA.hasWater){const hb=aiHub(si);   
+      if(hb){const hcp=landComp[idx(txOf(hb.x),tyOf(hb.y))],bcp=landComp[idx(txOf(b.x),tyOf(b.y))];
+        if(hcp>=0&&bcp>=0&&bcp!==hcp)gq=AI_G.rgu;}}
+    AICMD.setProdTag(si,b,gq);AICMD.queueUnit(b,pick);
     if(AI_PRODBAL)sd.milSp=(sd.milSp||0)+cv;                                      
     break;
   }
@@ -6507,8 +7706,14 @@ function aiMilTickSquads(si){
      defensive. */
   const homeDanger=thrS>Math.max(AI_SIEGE_S,(defStr+resStr)*AI_CTR_R);
   
-  if(a.atkOut&&atkStr<AI_WAVE_END){a.atkOut=false;a.atkTgt=null;a.atkMode='march';a.tbackOn=false;a.staged=false;a.stageT=0;a.mfT=0;}
-  if(a.atkOut){if(a.atkTgt&&a.atkTgt.hp<=0)a.atkTgt=null;if(!a.atkTgt){const nt=aiWaveTarget(si);if(nt){a.atkTgt=nt;a.staged=false;a.stageT=0;}else{a.atkOut=false;a.atkMode='march';}}}
+  
+  const ash=aiAshore(si);
+  if(a.atkOut&&atkStr<AI_WAVE_END&&!ash){a.atkOut=false;a.atkTgt=null;a.atkMode='march';a.tbackOn=false;a.staged=false;a.stageT=0;a.mfT=0;}
+  if(a.atkOut){
+    if(a.atkTgt&&a.atkTgt.hp<=0)a.atkTgt=null;
+    if(a.atkTgt&&ash&&aiPCompNear(a.atkTgt.x,a.atkTgt.y)!==ash.c)a.atkTgt=null; 
+    if(!a.atkTgt){const nt=(ash?aiTgtInComp(si,ash):null)||aiWaveTarget(si);if(nt){a.atkTgt=nt;a.staged=false;a.stageT=0;}else{a.atkOut=false;a.atkMode='march';}}
+  }
   
   a.stuck=AI_TGTSEL&&!aiWaveTarget(si)&&(buildings.some(b=>b.side!==si&&b.hp>0)||units.some(u=>u.side!==si&&isLandMil(u))||villagers.some(v=>(v.side||0)!==si&&v.hp>0));
   
@@ -6524,7 +7729,8 @@ function aiMilTickSquads(si){
     }else a.mlRally=false;
   }else a.mlRally=false;
   /* Reserve gathers into a wave, then launches. */
-  const launchOK=(!homeDanger)&&(mlLaunch!==false);
+  
+  const launchOK=(!homeDanger)&&(mlLaunch!==false)&&!aiAmphOn(si)&&!aiIslWarOn(si); 
   if(a.muster===0&&!a.resDep&&launchOK){
     if(resStr>=waveReq||(mlLaunch===true&&resStr>=Math.max(4,waveReq*0.5)))a.muster=t; 
   }
@@ -6546,6 +7752,10 @@ function aiMilTickSquads(si){
   
   {const resU=myU.filter(u=>u.grp===gT[AI_G.reinf]);
    if(!resU.length)a.resDep=false;
+   else if(a.resDep&&homeDanger&&thrS>0){
+     
+     a.resDep=false;aiOrder(si,AI_G.reinf,thrX,thrY,'guard');
+   }
    else if(a.resDep){
      const atkU=myU.filter(u=>u.grp===gT[AI_G.main]);
      if(!a.atkOut||!atkU.length){const tgt=aiWaveTarget(si); 
@@ -6557,7 +7767,7 @@ function aiMilTickSquads(si){
        if(Math.hypot(rcx-acx,rcy-acy)<TILE*5){AICMD.transferTag(si,AI_G.reinf,AI_G.main);a.resDep=false;} 
        else aiOrder(si,AI_G.reinf,acx,acy,'guard'); 
      }
-   }else if(a.muster===0){ 
+   }else if(a.muster===0&&!aiAmphOn(si)&&!aiIslWarOn(si)){ 
      if(homeDanger&&thrS>0)aiOrder(si,AI_G.reinf,thrX,thrY,'guard');
      else if(a.homeRally)aiOrder(si,AI_G.reinf,a.homeRally.x,a.homeRally.y,'guard');
    }
@@ -6602,8 +7812,13 @@ function aiMilTickSquads(si){
       /* In contact: any unit in the wave has been fired on in the last few seconds.
          Attacking villagers does not count, since villagers do not shoot back. */
       const engaged=AI_TBACK_HIT?atkU.some(u=>t-(u.lastHitT||-1e9)<3):foeU.some(e=>Math.hypot(e.x-cx,e.y-cy)<TILE*8);
-      const nearHome=Math.hypot(cx-hub.x,cy-hub.y)<=AI_TBACK_R;          
-      if(AI_NORETREAT&&homeDanger&&nearHome&&!engaged&&thrS>0){
+      
+      const nearHome=!ash&&(AI_TBACK_PATH?aiTbackReach(si,cx,cy,hub):Math.hypot(cx-hub.x,cy-hub.y)<=AI_TBACK_R);
+      
+      const backup=AI_TBACK_BACKUP&&aiCityN(si)>0;
+      
+      const swapHold=a.mission&&a.mission.kind==='swap'&&t<a.swapT+AI_SWAP_WIN;
+      if(AI_NORETREAT&&homeDanger&&nearHome&&!engaged&&thrS>0&&!backup&&!swapHold){
         
         a.tbackOn=true;a.atkMode='defend';a.staged=false;a.stageT=0;aiOrder(si,AI_G.main,thrX,thrY,'attack'); 
       }else if(tgt){
@@ -6734,6 +7949,8 @@ function aiMilTickSquads(si){
      }else if(gHar.task!=='guard'&&a.homeRally){a.harPure=false;gHar.noBld=false;aiOrder(si,AI_G.har,a.homeRally.x,a.homeRally.y,'guard');} 
    }else{a.harOut=false;a.harLeg=null;a.harPure=false;gHar.noBld=false;}}
   
+  if(AI_ISL_WAR)aiIslForceTick(si);
+  
   {const et=nibOn?curNib:a.atkTgt;
    a.nibSgOut=(et&&et.size)?myU.filter(u=>UT[u.type].role==='siege'&&Math.hypot(u.x-et.x,u.y-et.y)<=AI_SGP_R&&siegeReady(u)).length:0;}
   gT[AI_G.main].noBld=false; 
@@ -6814,6 +8031,7 @@ function aiScoutCtl(si){
   const o=aiObsPt(si,tgt);if(!o)return;
   let pick=null,pd=1e18; 
   for(const s of scouts){if((s.side||0)!==si||s.hp<=0)continue;
+    if(s.sea||s.morphT>0)continue; 
     if(safe&&s.hp<s.maxHp*0.9)continue; 
     const dd=(s.x-o.x)**2+(s.y-o.y)**2;if(dd<pd){pd=dd;pick=s;}}
   if(pick){pick.mode='explore';pick.pt=null;pick.quarry=null;pick.expT={x:o.x,y:o.y};pick.manual=true;pick.aiDir=true;pick.repathT=999;if(safe)a.scDirId=pick.id;}
@@ -7160,6 +8378,13 @@ const AICMD={
     units.forEach(u=>{if(u.side===si&&u.grp===g&&u.hp>0){u.grp=tg;u.tgt=null;
       if(tg.pt&&!u.gar)u.path=uFP(u,tg.pt.x+(rng()*2-1)*40,tg.pt.y+(rng()*2-1)*40);}});
   },
+  transferUnits:(si,from,to,list)=>{ 
+    const g=tagsOf(si)[from],tg=tagsOf(si)[to];if(!g||!tg||g===tg||!list||!list.length)return 0;
+    breakAmbush(g);breakAmbush(tg);
+    let n=0;
+    for(const u of list){if(!u||u.side!==si||u.grp!==g||u.hp<=0)continue;u.grp=tg;u.tgt=null;n++;}
+    return n;
+  },
   splitRole:(si,from,to,role)=>{ 
     const g=tagsOf(si)[from],tg=tagsOf(si)[to];if(!g||!tg||g===tg)return;
     breakAmbush(g);breakAmbush(tg);
@@ -7301,6 +8526,7 @@ function step(dt){
     n.amt=Math.min(n.max,n.amt+ir*dt);}}
   for(const s of shots)shotTick(s,dt);
   shots=shots.filter(s=>!s.dead);
+  for(const u of units)if(u.hp<=0&&u.cargo&&u.cargo.length)sinkTransport(u); 
   units=units.filter(u=>u.hp>0||u.gar);
   scouts=scouts.filter(s=>s.hp>0);
   for(const b of buildings)if(b.hp<=0)killBuilding(b);
@@ -7516,7 +8742,7 @@ function render(){
     if(hid)ctx.globalAlpha=0.45;
     const T=UT[u.type],rr=Math.max(7,bodyR(u)); 
     ctx.beginPath();
-    if(T.dom==='water')ctx.ellipse(u.x,u.y,bodyR(u)+1,6,0,0,7); 
+    if(T.dom==='water')ctx.ellipse(u.x,u.y,bodyR(u)+1,Math.max(6,bodyR(u)*0.55),0,0,7); 
     else ctx.arc(u.x,u.y,rr,0,7);
     ctx.fillStyle=u.side===0?(T.dom==='water'?'#5a4326':(T.medic?'#3a8f74':'#3a6ea8')):(T.dom==='water'?'#6b3326':'#a83a2c');ctx.fill(); 
     if(u.side===0&&u.grp){ctx.strokeStyle=TAGCOL[u.grp.i!==undefined?u.grp.i:0];ctx.lineWidth=2;ctx.stroke();} 
@@ -7537,9 +8763,10 @@ function render(){
     const hidS=(s.side||0)===0&&concealedFx(s);
     if(hidS)ctx.globalAlpha=0.45;
     ctx.beginPath();ctx.arc(s.x,s.y,6,0,7);
-    ctx.fillStyle='#2e8f86';ctx.fill();
-    ctx.strokeStyle='#7de8dc';ctx.lineWidth=1.5;ctx.stroke();
-    ctx.fillStyle='#fff';ctx.font='8px sans-serif';ctx.fillText(SCT.ch,s.x,s.y);
+    ctx.fillStyle=s.sea?'#2b6f8f':'#2e8f86';ctx.fill();                 
+    ctx.strokeStyle=s.morphT>0?'#ffd040':(s.sea?'#8fd8f0':'#7de8dc');   
+    ctx.lineWidth=1.5;ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font='8px sans-serif';ctx.fillText(s.sea?STR.uc_scoutSea:SCT.ch,s.x,s.y);
     if(s.hp<s.maxHp)bar(s.x,s.y-12,12,s.hp/s.maxHp,'#7fc25c');
     if(hidS)ctx.globalAlpha=1;
   }
@@ -7595,13 +8822,23 @@ function render(){
   for(const s of scouts)if(nfOK(s))nf(s);
   ctx.setLineDash([]);ctx.globalAlpha=1;
   
+  if(shipSel.length){ctx.strokeStyle='#7fe3c0';ctx.lineWidth=2;ctx.globalAlpha=.9;
+    for(const u of shipSel)if(u.hp>0&&!u.gar){ctx.beginPath();ctx.arc(u.x,u.y,bodyR(u)+5,0,7);ctx.stroke();}
+    ctx.globalAlpha=1;}
+  if(placing==='shipdest'){ctx.strokeStyle='#7fe3c0';ctx.lineWidth=2;ctx.globalAlpha=.85;
+    ctx.beginPath();ctx.arc(ptrW.x,ptrW.y,13,0,7);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(ptrW.x-19,ptrW.y);ctx.lineTo(ptrW.x+19,ptrW.y);ctx.moveTo(ptrW.x,ptrW.y-19);ctx.lineTo(ptrW.x,ptrW.y+19);ctx.stroke();
+    ctx.setLineDash([5,5]);ctx.globalAlpha=.5;
+    for(const u of shipSel)if(u.hp>0&&!u.gar){ctx.beginPath();ctx.moveTo(u.x,u.y);ctx.lineTo(ptrW.x,ptrW.y);ctx.stroke();}
+    ctx.setLineDash([]);ctx.globalAlpha=1;}
+  
   if(placing==='demolish'){ 
     const db=buildAt(ptrW.x,ptrW.y,true);
     if(db){const fw=db.w||db.size,fh=db.h||db.size;
       ctx.fillStyle='rgba(220,70,55,.42)';ctx.fillRect(db.tx*TILE,db.ty*TILE,fw*TILE,fh*TILE);
       ctx.strokeStyle='#ff5a40';ctx.lineWidth=2;ctx.strokeRect(db.tx*TILE,db.ty*TILE,fw*TILE,fh*TILE);}
   }
-  if(placing&&placing!=='demolish'&&ghostW){
+  if(placing&&placing!=='demolish'&&placing!=='shipdest'&&ghostW){ 
     if(placing==='wall'&&wallStart){ 
       for(const c of wallPath(wallStart.tx,wallStart.ty,txOf(ghostW.x),tyOf(ghostW.y))){
         ctx.fillStyle=canPlace('wall',c.x,c.y)?'rgba(120,220,120,.4)':'rgba(220,80,60,.4)';
@@ -7721,6 +8958,7 @@ function renderMM(){
 let ghostW=null;
 const pts=new Map();
 let panMoved=false,pinchD=0,nudgeU=null,nudgeDown=null,nudgeMoved=false,nudgeGhost=null; 
+let tapPrev=null,tapPrevT=-9; 
 cv.addEventListener('pointerdown',e=>{
   e.preventDefault();
   ptrW.x=cam.x+e.clientX/cam.z;ptrW.y=cam.y+e.clientY/cam.z;if(dbgMode)updateCoordHud();
@@ -7764,12 +9002,14 @@ function cvUp(e){
     const u=nudgeU,moved=nudgeMoved;nudgeU=null;nudgeGhost=null;
     if(moved){const mx=cam.x+e.clientX/cam.z,my=cam.y+e.clientY/cam.z;
       if(u.grp)breakAmbush(u.grp); 
+      
+      const UU=UT[u.type]||{};
       const T=units.find(e2=>e2.side===0&&e2.hp>0&&UT[e2.type].hold&&e2!==u&&Math.hypot(e2.x-mx,e2.y-my)<TILE*1.5); 
-      if(T&&!UT[u.type].dom&&!UT[u.type].hold&&canBoard(T,UT[u.type].vol||1)&&boardTransport(u,T)){
+      if(T&&UT[u.type]&&!UU.dom&&!UU.hold&&canBoard(T,UU.vol||1)&&boardTransport(u,T)){ 
         const wp=nearestWaterXY(u.x,u.y); 
         if(wp&&Math.hypot(T.x-wp.x,T.y-wp.y)>TILE*2){T.path=uFP(T,wp.x,wp.y);T.unloadPt=null;} 
         u.nudge=null;sndClick();return;}
-      if(UT[u.type].dom==='water'){moveShipCmd(u,mx,my);sndClick();return;} 
+      if(UU.dom==='water'){moveShipCmd(u,mx,my);sndClick();return;} 
       nudgeTo(u,mx,my);sndClick();return;}
   }
   if(pts.size>0||panMoved)return;
@@ -7784,10 +9024,23 @@ function cvUp(e){
     return;
   }
   if(placing==='demolish'){demolishAt(wx,wy);return;} 
+  if(placing==='shipdest'){ 
+    const n=shipDestCmd(wx,wy);
+    alertMsg(n?'white':'yellow',n?fmt(STR.msg_shipDestGo,{n}):STR.msg_shipDestNo);
+    if(n){shipSel=[];closePanels();}  
+    sndClick();return;
+  }
   if(placing){tryPlace(wx,wy);return;}
   closePanels();
   const pu=pickUnitAt(wx,wy); 
   if(pu){if(dbgMode){dbgPick=pu;logEvt('標記',pu,`${pu.state||''}${pu.job?' '+pu.job:''}${pu.carry>=10?' 卸貨':''}`);} 
+    
+    const t2=performance.now()/1000;
+    if(pu.side===0&&pu.type&&UT[pu.type]&&UT[pu.type].hold){
+      if(tapPrev===pu&&t2-tapPrevT<0.4){const n=shipSelOnScreen(pu);tapPrev=null;
+        alertMsg(n>1?'white':'yellow',n>1?fmt(STR.msg_shipPick,{n}):STR.msg_shipPickNone);openUnitPanel(pu);sndClick();return;}
+      tapPrev=pu;tapPrevT=t2;
+    }else tapPrev=null;
     openUnitPanel(pu);return;}
   const b=buildings.find(o=>o.side===0&&Math.abs(o.x-wx)<(o.w||o.size)*TILE/2&&Math.abs(o.y-wy)<(o.h||o.size)*TILE/2); 
   if(b&&b.done){
@@ -7885,7 +9138,7 @@ function renderScoutbar(){
     if((s.side||0)!==0)return; 
     const d=document.createElement('div');
     d.className='scChip';d.dataset.sid=s.id;
-    d.innerHTML=`<span style="font-size:15px">${MODES[s.mode].ic}</span><span>${SCT.ch}${MODES[s.mode].nm}</span>`;
+    d.innerHTML=`<span style="font-size:15px">${s.sea?'⛵':MODES[s.mode].ic}</span><span>${s.sea?STR.uc_scoutSea:SCT.ch}${MODES[s.mode].nm}</span>`;
     scoutbar.appendChild(d);
   });
 }
@@ -7940,9 +9193,7 @@ scoutbar.addEventListener('pointerdown',e=>{
     if(moved){
       if(document.elementFromPoint(ev.clientX,ev.clientY)===cv){
         const wx=cam.x+ev.clientX/cam.z,wy=cam.y+ev.clientY/cam.z;
-        s.pt={x:wx,y:wy};s.adj=false;s.dest=null;s.path=[];
-        if(s.mode==='observe'){s.quarry=null;s.lastSeen={x:wx,y:wy};}
-        if(s.mode==='explore'){s.expT={x:wx,y:wy};s.manual=true;s.repathT=999;} 
+        scoutOrderTo(s,wx,wy);
         markers.push({x:wx,y:wy,t0:t,col:'#4dd0c4'});
         sndClick();
       }
@@ -7959,7 +9210,7 @@ function closePanels(){q('#tagPanel').classList.add('hidden');q('#bldPanel').cla
   
   q('#ecoPanel').classList.add('hidden');q('#buildPanel').classList.add('hidden');
   q('#tabEco').classList.remove('on');q('#tabBuild').classList.remove('on');
-  if(placing){placing=null;wallStart=null;deploySettlerU=null;deployTrapU=null;updateBuildRow();}}
+  if(placing){placing=null;wallStart=null;deploySettlerU=null;deployTrapU=null;updateBuildRow();}} 
 /* Periodic redraws pause while a finger or mouse button is down: otherwise a
    rebuild swaps the button out mid-click, and the first tap on a panel appears to
    do nothing. */
@@ -8415,7 +9666,9 @@ function openUnitPanel(u){
     const T=UT[u.type],proj=!!T.proj;
     const pm=(base,bon)=>bon>0?`${base}(+${bon})`:`${base}`;
     const atkB=proj?techMod.rangedAtk:techMod.meleeAtk;
-    const sp=Math.round(T.sp*(T.mount?techMod.cavSpeed:1))+(T.mount&&techMod.cavSpeed>1?'↑':'');
+    
+    const starv=!!S_(u.side||0).starving;
+    const sp=Math.round(T.sp*(T.mount?techMod.cavSpeed:1)*(starv?0.75:1))+(T.mount&&techMod.cavSpeed>1?'↑':'')+(starv?'↓':'');
     const upk=(T.up||0)*UPKEEP_MULT*techMod.upkeep,ud=techMod.upkeep<1?'↓':'';
     const bnm=k=>UT[k]?UT[k].nm:(k==='building'?'建築':k==='raid'?'農田/萌芽林/漁籠':k); 
     const bns=T.bonus?Object.entries(T.bonus).map(([k,v])=>`${bnm(k)}×${k==='raid'?(v*techMod.raidDmg)+(techMod.raidDmg>1?'↑':''):v}`).join('、'):STR.ui_carryNone;
@@ -8428,11 +9681,13 @@ function openUnitPanel(u){
     else html+=`<div class="pSub">${fmt(STR.ui_uStatA,{a:pm(T.dmg,atkB),t:proj?STR.ui_atkRanged:STR.ui_atkMelee,m:pm(T.aM||0,techMod.meleeDef),p:pm(T.aP||0,techMod.rangedDef)})}</div>`;
     html+=`<div class="pSub">${fmt(STR.ui_uStatB,{r:rTok,s:sp,v:T.vis})}</div>
       <div class="pSub">${fmt(STR.ui_uStatC,{u:upk.toFixed(2),ud,b:bns})}</div>`;
+    if(starv)html+=`<div class="pSub" style="color:#ff6b5a">${fmt(STR.ui_uStarve,{s:Math.round(T.sp*(T.mount?techMod.cavSpeed:1)),cd:(T.cd*1.33).toFixed(2)})}</div>`;
     if(T.hold){ 
       const on=u.fireOn!==false,has=u.cargo&&u.cargo.length;
       html+=`<div class="pSub">${fmt(STR.ui_cargo,{a:transUsed(u),b:transHold(u)})}</div>
         <div class="rowBtns"><button class="sBtn" id="uLoad">${STR.ui_transLoad}</button><button class="sBtn" id="uUnload" ${has?'':'disabled'}>${STR.ui_transUnload}</button></div>
-        <div class="rowBtns"><button class="sBtn${on?' on':''}" id="uTF">${fmt(STR.ui_transFire,{s:on?STR.ui_on:STR.ui_off})}</button></div>`;
+        <div class="rowBtns"><button class="sBtn${on?' on':''}" id="uTF">${fmt(STR.ui_transFire,{s:on?STR.ui_on:STR.ui_off})}</button></div>
+        <div class="rowBtns"><button class="sBtn" id="uShipAll">${STR.ui_shipPick}</button><button class="sBtn" id="uShipGo">${fmt(STR.ui_shipDest,{n:'×'+Math.max(1,shipSelAlive().length)})}</button></div>`; 
     }
     if(T.settler){ 
       html+=`<div class="rowBtns"><button class="sBtn" id="uDeploy">${STR.ui_deploySettler}</button></div>`;
@@ -8447,6 +9702,11 @@ function openUnitPanel(u){
   }
   p.innerHTML=html;p.classList.remove('hidden');
   {const tf=q('#uTF');if(tf)tf.onclick=()=>{u.fireOn=(u.fireOn===false);openUnitPanel(u);sndClick();};} 
+  {const sa=q('#uShipAll');if(sa)sa.onclick=()=>{const n=shipSelOnScreen(u); 
+    alertMsg(n>1?'white':'yellow',n>1?fmt(STR.msg_shipPick,{n}):STR.msg_shipPickNone);openUnitPanel(u);sndClick();};}
+  {const sg=q('#uShipGo');if(sg)sg.onclick=()=>{if(!shipSelAlive().length)shipSel=[u]; 
+    closePanels();placing='shipdest';if(typeof updateBuildRow==='function')updateBuildRow();
+    alertMsg('white',fmt(STR.ui_shipDestHint,{n:shipSel.length}));sndClick();};} 
   {const lb=q('#uLoad');if(lb)lb.onclick=()=>{const n=loadNearby(u);alertMsg(n?'white':'yellow',n?fmt(STR.msg_loaded,{n}):STR.msg_loadNone);sndClick();};} 
   {const ub=q('#uUnload');if(ub)ub.onclick=()=>{unloadTransport(u,u.x,u.y);alertMsg('white',STR.msg_unloadDone);closePanels();sndClick();};} 
   {const db=q('#uDeploy');if(db)db.onclick=()=>{closePanels();deploySettlerU=u;placing='outpost';if(typeof updateBuildRow==='function')updateBuildRow();alertMsg('white',STR.ui_deployHint);sndClick();};} 
@@ -8468,10 +9728,17 @@ function openScoutPanel(s){
   p.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{
     setScoutMode(s,b.dataset.m);openScoutPanel(s);renderScoutbar();sndClick();});
 }
+
+function scoutOrderTo(s,wx,wy){
+  s.pt={x:wx,y:wy};s.adj=false;s.dest=null;s.path=[];
+  if(s.mode==='observe'){s.quarry=null;s.lastSeen={x:wx,y:wy};}
+  if(s.mode==='explore'){s.expT={x:wx,y:wy};s.manual=true;s.repathT=999;} 
+  s.manT={x:wx,y:wy};s.crossPt=null;s.crossC=null;
+}
 function setScoutMode(s,m){
   s.mode=m;s.adj=false;s.path=[];s.dest=null;s.expT=null;s.quarry=null;s.lostT=0;
   
-  s.lastSeen=null;s.manual=false;
+  s.lastSeen=null;s.manual=false;s.manT=null; 
   s.pt={x:s.x,y:s.y};
 }
 /* Left-hand panels. */
@@ -8885,8 +10152,12 @@ function arenaSetup(comp0,comp1){
   HOME_SCR: {
    if(location.search!==''){break HOME_SCR;}
    const scr=q('#homeScr');scr.classList.remove('hidden');setPaused(true);
-   let mMap=MAP_ID,mDiff='hard',mAi='';
+   let mMap=MAP_ID,mDiff='hard',mAi='',mGen='';
    const aiCivs=[['','🎲 隨機'],...CIVS.filter(c=>c.ai).map(c=>[c.aid||c.id,`${c.ic} ${c.nm}`])];
+   
+   const genWaters=[['','🎲 隨機'],['none','🏞 無水'],['lake','💧 湖泊'],['strait','🌊 海峽'],['arch','🏝 群島']];
+   const genWNm=w=>(genWaters.find(g=>g[0]===w)||['',''])[1];
+   const rollSeed=()=>(Math.random()*2e9)|0||1;
    const row=(sel,list,attr)=>list.map(([k,nm])=>`<button class="sBtn${k===sel?' on':''}" data-${attr}="${k}">${nm}</button>`).join('');
    const hPaint=()=>{
      q('#homeMapRow').innerHTML=row(mMap,Object.keys(MAP_DEFS).map(k=>[k,`${MAP_DEFS[k].ic} ${MAP_DEFS[k].nm}`]),'hm');
@@ -8894,11 +10165,22 @@ function arenaSetup(comp0,comp1){
      const canPick=aiCivPickable(mDiff);if(!canPick)mAi='';
      q('#homeAiCivRow').innerHTML=canPick?row(mAi,aiCivs,'ha')
        :'<span class="homeSub" style="margin:0">🎲 隨機——魔王以上不給選，對手文明要自己派斥候看出來。</span>';
-     q('#homeHint').textContent=MAP_DEFS[mMap].desc+'　'+diffDisclose(mDiff);
+     const isGen=mMap==='gen';
+     q('#homeGenLb').classList.toggle('hidden',!isGen);q('#homeGenRow').classList.toggle('hidden',!isGen);
+     if(isGen)q('#homeGenRow').innerHTML=row(mGen,genWaters,'hg');else mGen='';
+     const sv0=parseInt(q('#homeSeed').value,10);
+     q('#homeHint').textContent=MAP_DEFS[mMap].desc+'　'+diffDisclose(mDiff)
+       +(isGen&&mGen?`　→ ${genWNm(mGen)}：種子 ${sv0>0?sv0:'（開始時再抽）'}`:'');
    };
    const pick=(attr,set)=>e2=>{const v=e2.target&&e2.target.dataset&&e2.target.dataset[attr];
      if(v!==undefined){set(v);hPaint();sndClick();}};
    q('#homeMapRow').onclick=pick('hm',v=>mMap=v);
+   q('#homeGenRow').onclick=pick('hg',v=>{
+     const reroll=(v===mGen);mGen=v;                                  
+     if(!v)return;                                                    
+     const sv=parseInt(q('#homeSeed').value,10);
+     q('#homeSeed').value=genSeedFor(v,(!reroll&&sv>0)?sv:rollSeed()); 
+   });
    q('#homeDiffRow').onclick=pick('hd',v=>mDiff=v);
    q('#homeAiCivRow').onclick=pick('ha',v=>{if(aiCivPickable(mDiff))mAi=v;});
    q('#homeGo').onclick=()=>{const u=new URL(location.href);u.search='';
@@ -8907,9 +10189,11 @@ function arenaSetup(comp0,comp1){
      u.searchParams.set('diff',mDiff);
      if(mAi&&aiCivPickable(mDiff))u.searchParams.set('aiciv',mAi);
      let sv=parseInt(q('#homeSeed').value,10);
-     if(mMap==='gen'&&!(sv>0))sv=(Math.random()*2e9)|0||1;             
+     if(mMap==='gen'&&!(sv>0))sv=rollSeed();                           
+     if(mMap==='gen'&&mGen)sv=genSeedFor(mGen,sv);                     
      if(sv>0)u.searchParams.set('seed',sv);
      location.href=u.href;};
+   q('#homeSeed').oninput=()=>{if(mMap==='gen'&&mGen)hPaint();};      
    hPaint();}
   
   q('#specPause').onclick=()=>{setPaused();sndClick();};
@@ -9384,7 +10668,8 @@ window.dbg={step,issueTagOrder,issueGarrison,ejectAll,exitGar,queueUnit,tags,
       atkOut:a.atkOut,mode:a.atkMode,waveReq:a.waveReq,muster:a.muster>0,musterPt:a.musterPt?{x:Math.round(a.musterPt.x),y:Math.round(a.musterPt.y)}:null,
       tback:a.tbackOn,resDep:a.resDep,tgt:a.atkTgt?{ty:a.atkTgt.type,hp:+(a.atkTgt.hp/a.atkTgt.maxHp).toFixed(3)}:null,
       staged:a.staged,stagePt:a.stagePt?{x:Math.round(a.stagePt.x),y:Math.round(a.stagePt.y)}:null,mf:a.mfOn,divertN:a.divertN,stuck:a.stuck, 
-      har:+strOf(AI_G.har).toFixed(1),harOut:a.harOut===true,harPure:!!a.harPure};}, 
+      har:+strOf(AI_G.har).toFixed(1),harOut:a.harOut===true,harPure:!!a.harPure, 
+      resCap:a.resCap===undefined?null:a.resCap};},                              
   aiProdObs:(si)=>{si=si===undefined?1:si;const sd=S_(si),T=techOf(si),d=aiD(si),vills=villagers.filter(v=>alive(v)&&(v.side||0)===si).length; 
     let fCap=aiFarmCap(si),cCap=aiCopCap(si);const rgV=AI_SQUADS&&AI_REGROW&&d.regrow==='vill';
     return {milSp:+(sd.milSp||0).toFixed(0),devSp:+(sd.devSp||0).toFixed(0),share:d.milShare||1,
@@ -9397,6 +10682,42 @@ window.dbg={step,issueTagOrder,issueGarrison,ejectAll,exitGar,queueUnit,tags,
   aiMlAct:(si)=>A(si===undefined?1:si).mlAct,
   aiRoutesInfo:(si)=>A(si===undefined?1:si).routes.map(r=>({len:r.cells.length,bn:r.bn.map(b=>({x:b.x,y:b.y,w:b.w})),rally:r.rally})),
    aiNavyTick,aiSeaInit,AI_SEA,AI_G,AI_ECO,aiDockSpot,aiTrapSpot,aiZoneOf,aiZoneAmt,aiSeaEco,aiIslandStart,aiIslandTick,moveShipCmd,
+   aiAmphStart,aiAmphTick,aiAmphAbort,aiAmphTgt,aiBeachSpot,aiPCompNear,aiFoeMass,aiAshore,
+   aiCityN,aiTbackReach:(si,cx,cy)=>{const h=aiHub(si===undefined?1:si);return h?aiTbackReach(si===undefined?1:si,cx,cy,h):null;},
+  aiAmphObs:(si)=>{si=si===undefined?1:si;const m=A(si).amph;                 
+    const ash=aiAshore(si);                                                  
+    const ao={ashore:!!ash,strAsh:ash?+units.filter(u=>u.side===si&&isLandMil(u)&&u.grp===tagsOf(si)[AI_G.main]&&!u.gar).reduce((s,u)=>s+uStr(u),0).toFixed(1):0};
+    if(!m)return Object.assign({on:false,cd:+Math.max(0,(A(si).amphT||-1e9)+AI_AMPH_CD-t).toFixed(1)},ao);
+    return Object.assign({on:true,phase:m.phase,age:+(t-m.pT).toFixed(1),
+      beach:{x:Math.round(m.beach.x),y:Math.round(m.beach.y)},
+      tgt:m.tgt?{ty:m.tgt.type,side:m.tgt.side}:null,
+      needS:m.needS===undefined?null:m.needS,                                
+      nT:m.T.length,cargo:m.T.reduce((s,T)=>s+((T.cargo||[]).length),0),
+      vol:m.T.reduce((s,T)=>s+transUsed(T),0),                               
+      esc:units.filter(u=>u.side===si&&isNavyMil(u)).length},ao);},
+   aiIslWarStart,aiIslWarTick,aiIslWarEnd,aiIslWarTgt,aiIslFerryPick,aiIslForceTick,aiIsleFoeStr,
+  aiIslWarObs:(si)=>{si=si===undefined?1:si;const a=A(si),m=a.islw;             
+    const gR=tagsOf(si)[AI_G.rgu],hub=aiHub(si);
+    const hc=(hub&&landComp)?landComp[idx(txOf(hub.x),tyOf(hub.y))]:-1;
+    const rgu=units.filter(u=>u.side===si&&isLandMil(u)&&u.grp===gR&&u.hp>0);
+    const isl=rgu.filter(u=>!u.gar&&landComp&&landComp[idx(txOf(u.x),tyOf(u.y))]!==hc);
+    const fail={};for(const k in (a.islFail||{}))fail[k]={n:a.islFail[k].n,cd:+Math.max(0,(a.islFail[k].cd||-1e9)-t).toFixed(1)};
+    const io={rgu:rgu.length,rguGar:rgu.filter(u=>!!u.gar).length,
+      isle:isl.length,isleStr:+isl.reduce((s,u)=>s+uStr(u),0).toFixed(1),fail};
+    if(!m)return Object.assign({on:false,lock:false,cd:+Math.max(0,(a.islwT||-1e9)+AI_ISL_WAR_CD-t).toFixed(1)},io);
+    return Object.assign({on:true,lock:aiIslWarOn(si),mode:m.mode,phase:m.phase,age:+(t-m.pT).toFixed(1),
+      comp:m.comp,need:m.need===undefined?null:m.need,force:(m.force||[]).length,
+      nT:m.T.length,cargo:m.T.reduce((s,T)=>s+((T.cargo||[]).length),0)},io);},
+  aiIslandObs:(si)=>{si=si===undefined?1:si;const m=A(si).island;           
+    const isle=aiIsleOuts(si);
+    const io={isleOut:isle.length,                                           
+      isleTwr:isle.reduce((n,b)=>n+(aiBldNear(si,'tower',b.x,b.y,4)?1:0),0),  
+      twrCap:aiTowerCap(si),twrSpot:(()=>{const s=aiTowerSpot(si,villagers.filter(v=>alive(v)&&(v.side||0)===si).length);
+        return s?(s.type||'pt'):null;})()};                                   
+    if(!m)return Object.assign({on:false},io);
+    return Object.assign({on:true,phase:m.phase,age:+(t-m.pT).toFixed(1),
+      esc:(m.esc||[]).length,escOn:(m.esc||[]).filter(u=>u.gar===m.T).length,
+      su:!!m.su,T:!!m.T},io);},
   aiNavyWant:(si)=>{si=si===undefined?1:si;return aiNavyWant(techOf(si),A(si).state,si);},
   aiNavyProd:(si)=>{si=si===undefined?1:si;return aiNavyProd(units.filter(u=>u.side===si&&isNavyMil(u)),techOf(si),stockOf(si),si);},
   aiSeaInfo:()=>({hasWater:AI_SEA.hasWater,zones:AI_SEA.zones.map(z=>({c:z.c,x:z.x,y:z.y,n:z.nodes.length})),ores:AI_SEA.ores.map(o=>({comp:o.comp,n:o.nodes.length}))}),
@@ -9423,7 +10744,7 @@ window.dbg={step,issueTagOrder,issueGarrison,ejectAll,exitGar,queueUnit,tags,
   paintNavalTerrain,addNavalNodes,NAVAL_MAP:()=>NAVAL_MAP, 
   MAP_ID:()=>MAP_ID,MAP_DEF:()=>MAP_DEF,MAP_IDS:()=>Object.keys(MAP_DEFS),mirTx,mirTy, 
   MAP_GEN:()=>Object.fromEntries(Object.entries(MAP_DEFS).map(([k,d])=>[k,{paint:d.paint,nodes:d.nodes,ptc:d.ptc,tw:d.tw,th:d.th,sym:d.sym}])), 
-  genMapPlan,applyGenTerrain,applyGenNodes,GEN_PLAN:()=>GEN_PLAN,GEN_SEED:()=>GEN_SEED, 
+  genMapPlan,genSeedFor,applyGenTerrain,applyGenNodes,GEN_PLAN:()=>GEN_PLAN,GEN_SEED:()=>GEN_SEED, 
   fishDropoff,nearestFish,fishTick,
   boardTransport,unloadTransport,transUsed,transHold,canBoard,transTick, 
   trainSettler,spawnSettler,deploySettler,SETTLER_CAP, 

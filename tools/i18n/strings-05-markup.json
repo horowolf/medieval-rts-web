@@ -37,5 +37,6 @@
   "<button id=\"dbgSaveBtn\" type=\"button\">💾 存檔</button>": "<button id=\"dbgSaveBtn\" type=\"button\">💾 Export log</button>",
   "<button id=\"dbgClearBtn\" type=\"button\">🗑 清空</button>": "<button id=\"dbgClearBtn\" type=\"button\">🗑 Clear</button>",
   "<div id=\"dbgLogBody\">（無事件）</div>": "<div id=\"dbgLogBody\">(no events)</div>",
-  "<span id=\"techClose\" title=\"關閉\">✕</span>": "<span id=\"techClose\" title=\"Close\">✕</span>"
+  "<span id=\"techClose\" title=\"關閉\">✕</span>": "<span id=\"techClose\" title=\"Close\">✕</span>",
+  "<div class=\"homeLb hidden\" id=\"homeGenLb\">水域版型（🎲 隨機生成專用·選了會自動找到符合的種子）</div><div class=\"rowBtns hidden\" id=\"homeGenRow\"></div>": "<div class=\"homeLb hidden\" id=\"homeGenLb\">Water layout (random maps only — picking one finds a matching seed)</div><div class=\"rowBtns hidden\" id=\"homeGenRow\"></div>"
 }

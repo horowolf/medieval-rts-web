@@ -358,7 +358,7 @@ try {
     const noMerge=!TECH.some(t=>/鐵匠工坊/.test(t.nm));                                                // 未合併
     const engHas=[...civEnabled('eng')], hreHas=[...civEnabled('hre')], monHas=[...civEnabled('mon')];
     const cnt={eng:engHas.length,hre:hreHas.length,mon:monHas.length};
-    const inBand=Object.values(cnt).every(n=>n>=18&&n<=26);                                           // 單一文明：陸戰 12~18 + 水軍線(5 通用+1 專屬)＝18~26（specs/12 五加入後擴充）
+    const inBand=Object.values(cnt).every(n=>n>=18&&n<=28);                                           // 單一文明：陸戰 12~18 + 水軍線(6 通用+1 專屬)＝18~28（specs/12 五加入後擴充；上緣 26→28＝N6 大型運輸艦/N7 偵察快艇）
     const navalUniv=['N1','N2','N3','N4','N5'].every(x=>engHas.includes(x)&&hreHas.includes(x)&&monHas.includes(x)); // 5 項通用水軍＝各文明皆啟用
     const navalCiv=engHas.includes('NE')&&!engHas.includes('NH')&&!engHas.includes('NM')              // 專屬水軍：英長弓戰船/神羅鐵甲艦/蒙快火船 互斥
       &&hreHas.includes('NH')&&!hreHas.includes('NE')&&!hreHas.includes('NM')
@@ -377,9 +377,9 @@ try {
     closeTechTree(); const closed=document.querySelector('#techOverlay').classList.contains('hidden');
     return {n:ids.length,uniqOK,m123,noMerge,cnt,inBand,navalUniv,navalCiv,engOK,hreOK,monOK,universalAll,noDangling,
       s2eng,m6mon,e4pool,opened,civSet,cards,locked,closed};`);
-  check('tech tree has 36 items with unique ids (28 land + 8 naval)', t19.n===36 && t19.uniqOK===true, {n:t19.n});
+  check('tech tree has 38 items with unique ids (28 陸戰 + 10 水軍·N7 偵察快艇 2026-07-25 段F 前置)', t19.n===38 && t19.uniqOK===true, {n:t19.n});
   check('M1/M2/M3 kept as three separate value techs (NOT merged into blacksmith)', t19.m123===true && t19.noMerge===true);
-  check('each civ enables 18–26 techs (land 12–18 + naval line)', t19.inBand===true, t19.cnt);
+  check('each civ enables 18–28 techs (陸戰 12–18 + 水軍線)', t19.inBand===true, t19.cnt);
   check('naval research: N1–N5 universal (every civilisation has them); NE/NH/NM civ-specific and mutually exclusive', t19.navalUniv===true && t19.navalCiv===true);
   check('England mask: S2+S3+longbowman on; M5/F3/M6/pack animals/heavy infantry/horse archer locked', t19.engOK===true);
   check('HRE mask: M5+F3+heavy infantry on; S2/S3/longbowman/horse archer locked', t19.hreOK===true);
@@ -389,9 +389,9 @@ try {
   check('star ownership: S2→England, M6→Mongol, E4→none of v1.0 civs (reserve pool)',
     t19.s2eng.includes('英格蘭') && t19.m6mon.includes('蒙古') && t19.e4pool.length===0,
     {s2:t19.s2eng,m6:t19.m6mon,e4:t19.e4pool});
-  check('tech overlay opens, switches civ, renders all 36 cards, closes',
-    t19.opened===true && t19.civSet==='mon' && t19.cards===36 && t19.closed===true, t19);
-  check('viewing Mongol renders locked cards = 36 − enabled = n−cnt.mon', t19.locked===t19.n-t19.cnt.mon, {locked:t19.locked});
+  check('tech overlay opens, switches civ, renders all 38 cards, closes',
+    t19.opened===true && t19.civSet==='mon' && t19.cards===38 && t19.closed===true, t19);
+  check('viewing Mongol renders locked cards = 38 − enabled = n−cnt.mon', t19.locked===t19.n-t19.cnt.mon, {locked:t19.locked});
 
   console.log('\n[20] research mechanics (part 3): research / prereqs / age gates + age up + unit unlocks + effects techMod live');
   const t20 = await ev(`
@@ -1335,7 +1335,11 @@ try {
     const okA=boardTransport(a,T),okB=boardTransport(b,T),okC=boardTransport(c,T);
     let boarded=0; for(let i=0;i<300&&boarded<3;i++){step(TICK);boarded=T.cargo.length;}
     const usedFull=transUsed(T), allGar=a.gar===T&&b.gar===T&&c.gar===T;
-    const capYes=canBoard(T,2), capNo=canBoard(T,3);
+    const capYes=canBoard(T,6), capNo=canBoard(T,7);
+    const holdBase=transHold(T);
+    playerTech.researched.add('N6');recomputeTechMod(0);
+    const holdN6=transHold(T), n6Extra=canBoard(T,11);
+    playerTech.researched.delete('N6');recomputeTechMod(0);
     unloadTransport(T,T.x,T.y);
     let unl=false; for(let i=0;i<150&&!unl;i++){step(TICK);if(T.cargo.length===0)unl=true;}
     const offField=a.gar===null&&b.gar===null&&c.gar===null;
@@ -1346,9 +1350,10 @@ try {
     unloadTransport(T2,T2.x,T2.y); for(let i=0;i<60;i++)step(TICK);
     const partialLeft=T2.cargo.length;
     units.length=0;buildings.length=0;blocked.fill(0);wallMask.fill(0);gateMask.fill(0);nodes.length=0;terr.fill(T_PLAIN);paintTerrain();arenaMode=false;
-    return {okA,okB,okC,boarded,usedFull,allGar,capYes,capNo,unl,offField,onLand,partialLeft};`);
+    return {okA,okB,okC,boarded,usedFull,allGar,capYes,capNo,holdBase,holdN6,n6Extra,unl,offField,onLand,partialLeft};`);
   check('Naval; transport carries: 3 units board (cargo=3; Σvol=4; all removed from the field, gar=ship)', t53.boarded===3&&t53.usedFull===4&&t53.allGar===true&&t53.okA&&t53.okB&&t53.okC, t53);
-  check('Naval; transport capacity: hold=6; canBoard(+2) allowed, canBoard(+3) not (blocked when full)', t53.capYes===true&&t53.capNo===false, t53);
+  check('水軍·運輸艦容量：hold=10（段E 6→10）·canBoard(+6)可 canBoard(+7)不可(滿載擋)', t53.capYes===true&&t53.capNo===false&&t53.holdBase===10, t53);
+  check('段E·N6 大型運輸艦：載運量 10→15（研發後 4+11 塞得下·撤銷研發回 10）', t53.holdN6===15&&t53.n6Extra===true, t53);
   check('Naval; transport unloads: drops units against the shore → units back on the field (gar=null; landing on land tiles); cargo cleared', t53.unl===true&&t53.offField===true&&t53.onLand===true, t53);
   check('Naval; transport unloads half: not enough land tiles at the drop point (single tile ringed by water) → only 1 unloaded; the other 2 stay aboard', t53.partialLeft===2, t53);
 
@@ -2420,8 +2425,10 @@ try {
     nodes.push(wSafe,wTower);
     R.aiVillAvoids = nearestNode('wood',C(25,12).x,C(25,12).y,{side:1},true)===wSafe;
     dbg.setEcoReach(300);
-    nodes.push({type:'stone',x:C(22,20).x,y:C(22,20).y,amt:500,max:500});
+    const farS={type:'stone',x:C(34,30).x,y:C(34,30).y,amt:500,max:500};
+    nodes.push(farS);
     while(villagers.filter(v=>(v.side||0)===1).length<12)spawnVillager(atc);
+    {let c=0;for(const v of villagers)if((v.side||0)===1&&c<2){v.node=farS;v.x=farS.x+20;v.y=farS.y;c++;}}
     techOf(1).age=3; techOf(1).ageUp=null; recomputeTechMod(1);
     stockOf(1).wood=800; stockOf(1).stone=800; stockOf(1).gold=400; stockOf(1).food=400; computeDanger();
     dbg.aiMapFeat(1,true); // Force the map-feature cache to refresh: this test changes ECO_REACH (1100→300) and adds ore mid-run,
@@ -3787,11 +3794,11 @@ try {
     world(); placeB(0,'tc',3,20,true); placeB(1,'tc',30,10,true);
     freshAi();
     for(let i=0;i<8;i++)gold(24+(i%4),8+((i/4)|0));
-    gold(10,20);gold(11,20); gold(40,22);gold(41,22);
+    gold(10,20);gold(11,20); gold(48,26);gold(49,26);
     let f=dbg.aiMapFeat(1,true);
     const villA=dbg.aiVillT(1,2), outA=dbg.aiOutMax(1), clA=f.clusters;
     for(let i=0;i<8;i++)gold(24+(i%4),12+((i/4)|0));
-    gold(12,3);gold(13,3); gold(44,4);gold(45,4);
+    gold(12,3);gold(13,3); gold(52,4);gold(53,4);
     f=dbg.aiMapFeat(1,true);
     const villB=dbg.aiVillT(1,2), outB=dbg.aiOutMax(1), clB=f.clusters;
     R.villScales = villB>villA;
@@ -3811,7 +3818,7 @@ try {
     world(); placeB(0,'tc',3,20,true); placeB(1,'tc',30,10,true); freshAi();
     dbg.setEcoReach(500);
     for(let i=0;i<8;i++)gold(24+(i%4),8+((i/4)|0));
-    gold(10,20);gold(11,20); gold(40,22);gold(41,22); gold(12,3);gold(13,3); gold(44,4);gold(45,4);
+    gold(10,20);gold(11,20); gold(48,26);gold(49,26); gold(12,3);gold(13,3); gold(52,4);gold(53,4);
     dbg.aiMapFeat(1,true);
     const v0=dbg.aiVillT(1,2), o0=dbg.aiOutMax(1);
     const kV=AI_DIFF.hard.villF, kO=AI_DIFF.hard.outF;
@@ -3853,16 +3860,24 @@ try {
     const nB=(si,tp)=>buildings.filter(b=>b.side===si&&b.hp>0&&b.type===tp).length;
     const hasOut=()=>dbg.aiCmt(1).some(c=>c.key==='bld:outpost')||nB(1,'outpost')>0;
     const R={}; const reach0=dbg.ecoReach();
-    const expSetup=(lv)=>{world(); placeB(0,'tc',3,20,true); const tc=placeB(1,'tc',30,10,true);
+    const expSetup=(lv,reach)=>{world(); placeB(0,'tc',3,20,true); const tc=placeB(1,'tc',30,10,true);
       freshAi(lv); villagers=villagers.filter(v=>(v.side||0)===0); for(let i=0;i<12;i++)spawnVillager(tc);
-      dbg.setEcoReach(500);
-      gold(40,22);gold(41,22); gold(10,2);gold(11,2);
+      dbg.setEcoReach(reach||500);
+      gold(44,28);gold(45,28); gold(10,2);gold(11,2);
       {const s=stockOf(1);for(const k in s)s[k]=1000;} return tc;};
-    expSetup('hard'); gold(28,10);gold(29,10); dbg.aiMapFeat(1,true);
+    const manFar=(k)=>{const n=nodes.find(x=>x.type==='gold'&&txOf(x.x)===44);let c=0;
+      for(const v of villagers)if((v.side||0)===1&&v.hp>0&&c<k){v.node=n;v.x=n.x+20;v.y=n.y;c++;}};
+    expSetup('hard',1100); gold(28,10);gold(29,10); dbg.aiMapFeat(1,true);
+    for(let i=0;i<6;i++)dbg.aiStratTick(1);
+    R.noVillNoOutpost = !hasOut();
+    manFar(2); dbg.aiMapFeat(1,true);
+    for(let i=0;i<6;i++)dbg.aiStratTick(1);
+    R.villThenOutpost = hasOut();
+    expSetup('hard'); gold(28,10);gold(29,10); manFar(2); dbg.aiMapFeat(1,true);
     for(let i=0;i<6;i++)dbg.aiStratTick(1);
     R.hardProactive = hasOut();
     R.outpostBuilt = nB(1,'outpost')>0;
-    expSetup('hard'); gold(28,10);gold(29,10);
+    expSetup('hard'); gold(28,10);gold(29,10); manFar(2);
     techOf(1).ageUp={t:0}; dbg.aiMapFeat(1,true); dbg.aiStratTick(1);
     R.expandDuringAge = hasOut();
     expSetup('noob'); gold(28,10);gold(29,10); dbg.aiMapFeat(1,true); dbg.aiStratTick(1);
@@ -3916,6 +3931,7 @@ try {
     for(const k in stockOf(1))stockOf(1)[k]=0;
     return R;`);
   check('R3 expansion by difficulty: Hard expands actively (including mid age-up; the !T.ageUp dead knob is retired; outposts really do get built, >0); Beginner expands only once its home radius is exhausted (reactive)', t92.hardProactive&&t92.outpostBuilt&&t92.expandDuringAge&&t92.noobHoldsWhenRich&&t92.noobExpandsWhenExhausted, t92);
+  check('🏚️ 鬼鎮條款（2026-07-24）：圈內走得到的遠礦沒村民在採＝不蓋（同一情境掛上 2 個採集村民後就蓋＝因果對照）', t92.noVillNoOutpost&&t92.villThenOutpost, t92);
   check('R3 tower decision chain: one raid does not trigger (false-positive protection); two does (Hard\'s threshold); Beginner\'s threshold is higher; a mine that already has a tower is not covered twice', t92.oneHitNoTower&&t92.twoHitTower&&t92.noobTwoHitHolds&&t92.coveredNoTower, t92);
   check('R3 turtle guard rail: tower building stops at aiTowerCap (no unbounded count crowding out the economy)', t92.towerBounded, t92);
   check('R3 wall personality: the rusher (Mongol) never walls; the turtle (HRE) walls pre-emptively without waiting to be on the defensive; the balanced civilisation (England) is reactive', t92.rushNeverWalls&&t92.turtleProactiveWalls&&t92.reactiveWalls, t92);
@@ -3989,8 +4005,8 @@ try {
     freshAi('noob'); villagers=villagers.filter(v=>(v.side||0)===0); for(let i=0;i<12;i++)spawnVillager(ntc);
     const reach0=dbg.ecoReach(); dbg.setEcoReach(500);
     nodes.push({type:'food',x:C(28,10).x,y:C(28,10).y,amt:400,max:400});
-    nodes.push({type:'gold',x:C(40,22).x,y:C(40,22).y,amt:500,max:500});
-    nodes.push({type:'gold',x:C(41,22).x,y:C(41,22).y,amt:500,max:500});
+    nodes.push({type:'gold',x:C(44,28).x,y:C(44,28).y,amt:500,max:500});
+    nodes.push({type:'gold',x:C(45,28).x,y:C(45,28).y,amt:500,max:500});
     nodes.push({type:'gold',x:C(10,2).x,y:C(10,2).y,amt:500,max:500});
     nodes.push({type:'gold',x:C(11,2).x,y:C(11,2).y,amt:500,max:500});
     {const s=stockOf(1);for(const k in s)s[k]=1000;}
@@ -5951,6 +5967,163 @@ try {
   check('🎲 應用階段對稱：套地形＋資源後逐格/逐點對稱＝0（pt 與 mir 各抽一張都過）',
     t111b.applySym, t111b);
 
+  console.log('\n[111c] 🏔️ 段A/B 高地坡道＋水域＋運輸感知連通閘（2026-07-24 使用者：高地不一定要有崖·全坡道/全崖都可以／崖隔死一律重生·零放行／水可隔死但有運輸艦還能打／首都可達區要有各項資源）：以引擎規則 **8-連通·分域**洪水（非生成器內 4-conn 閘＝獨立驗）套 40 種子·鎖住「兩家連通（陸直連或運輸經共享水）／首都自給／高地坡道水都生得出」');
+  const t111c = await ev(`
+    const P=dbg.genMapPlan,types=['wood','food','gold','stone','iron'];
+    const savedTerr=Uint8Array.from(terr),savedNodes=nodes.slice();
+    const lh=c=>c===T_HIGH?1:c===T_RAMP?0.5:0;
+    const landW=c=>c!==T_WATER, navW=c=>c===T_WATER||c===T_SHALLOW; // 陸可走＝非深水；可航＝深水+淺灘
+    const D=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]; // 8-連通（引擎規則）
+    const landFlood=(sx,sy)=>{const seen=new Uint8Array(TW*TH),s=idx(sx,sy);if(!landW(terr[s]))return seen;
+      seen[s]=1;const st=[s];while(st.length){const cur=st.pop(),cx=cur%TW,cy=(cur/TW)|0,hc=lh(terr[cur]);
+        for(const [dx,dy] of D){const nx=cx+dx,ny=cy+dy;if(nx<0||ny<0||nx>=TW||ny>=TH)continue;const ni=idx(nx,ny);
+          if(seen[ni]||!landW(terr[ni]))continue;if(Math.abs(lh(terr[ni])-hc)>0.5)continue;seen[ni]=1;st.push(ni);}}return seen;};
+    let hiMaps=0,rampMaps=0,waterMaps=0,seal=0,unreach=0;
+    for(let s=1;s<=40;s++){
+      const pl=P(s),[px,py]=pl.ptc;
+      terr.fill(T_PLAIN);dbg.applyGenTerrain(pl);nodes.length=0;dbg.applyGenNodes(pl);
+      let hi=0,rp=0,wa=0;for(let i=0;i<TW*TH;i++){const c=terr[i];if(c===T_HIGH)hi++;else if(c===T_RAMP)rp++;else if(c===T_WATER)wa++;}
+      if(hi>0)hiMaps++;if(rp>0)rampMaps++;if(wa>0)waterMaps++;
+      const seenL=landFlood(px-1,py);
+      const m0=pl.sym==='pt'?[TW-1-(px-1),TH-1-py]:[TW-1-(px-1),py];
+      const seenL1=landFlood(m0[0],m0[1]);
+      let conn=seenL[idx(m0[0],m0[1])]===1;                 // 陸直連（含淺灘/橋渡口）
+      if(!conn){                                            // 運輸：兩家岸格共享同一可航水分量
+        const wc=new Int32Array(TW*TH).fill(-1);let wn=0;
+        for(let i=0;i<TW*TH;i++){if(!navW(terr[i])||wc[i]>=0)continue;wc[i]=wn;const st=[i];
+          while(st.length){const cur=st.pop(),cx=cur%TW,cy=(cur/TW)|0;
+            for(const [dx,dy] of D){const nx=cx+dx,ny=cy+dy;if(nx<0||ny<0||nx>=TW||ny>=TH)continue;const ni=idx(nx,ny);
+              if(wc[ni]>=0||!navW(terr[ni]))continue;wc[ni]=wn;st.push(ni);}}wn++;}
+        const shores=seen=>{const set=new Set();for(let i=0;i<TW*TH;i++){if(!seen[i])continue;const cx=i%TW,cy=(i/TW)|0;
+          for(const [dx,dy] of D){const nx=cx+dx,ny=cy+dy;if(nx<0||ny<0||nx>=TW||ny>=TH)continue;const ni=idx(nx,ny);if(wc[ni]>=0)set.add(wc[ni]);}}return set;};
+        const w0=shores(seenL),w1=shores(seenL1);for(const w of w0)if(w1.has(w)){conn=true;break;}
+      }
+      if(!conn)seal++;
+      const near=nodes.filter(n=>Math.max(Math.abs(txOf(n.x)-(px+1)),Math.abs(tyOf(n.y)-(py+1)))<=14);
+      if(!types.every(tp=>near.some(n=>n.type===tp&&seenL[idx(txOf(n.x),tyOf(n.y))])))unreach++;
+    }
+    terr.set(savedTerr);nodes.length=0;for(const n of savedNodes)nodes.push(n);paintTerrain();computeLandComp();
+    return {hiMaps,rampMaps,waterMaps,seal,unreach};`);
+  check('🏔️ 運輸感知連通閘：40 種子·8-連通分域獨立驗＝兩家零隔死【陸直連 或 運輸經共享水】（崖隔死重生·水隔死靠運輸放行）＋首都可達區含五資源（零不可達）',
+    t111c.seal===0&&t111c.unreach===0, t111c);
+  check('🏔️ 高地/坡道/水域都確實生成（非靜默關閉）：40 種子中三者各 >0',
+    t111c.hiMaps>0&&t111c.rampMaps>0&&t111c.waterMaps>0, t111c);
+
+  console.log('\n[111d] ⚓ 段C 水域內容接線（2026-07-24）：生了水就要有漁業經濟——①對稱漁場節點 ②首都走得到的合法碼頭岸段（湖圖硬性在家門口 ≤24 格）③AI 海軍腦真的開得起來（aiSeaInit/aiDockSpot/漁場分區皆有目標·非空轉）');
+  const t111d = await ev(`
+    const P=dbg.genMapPlan;
+    const savedTerr=Uint8Array.from(terr),savedNodes=nodes.slice(),savedBld=buildings.slice(),
+          savedBlk=Uint8Array.from(blocked),savedFV=dbg.aiVision();
+    let wMaps=0,lakeM=0,strM=0,archM=0,noFish=0,noDock=0,farDock=0,dryFish=0,asymFish=0,strayFish=0;
+    for(let s=1;s<=60;s++){
+      const pl=P(s);
+      terr.fill(T_PLAIN);dbg.applyGenTerrain(pl);nodes.length=0;dbg.applyGenNodes(pl);
+      const sea=nodes.filter(n=>n.sea);
+      if(pl.water==='none'){if(sea.length)strayFish++;continue;}
+      wMaps++;if(pl.water==='lake')lakeM++;else if(pl.water==='strait')strM++;else archM++;
+      if(sea.length<2)noFish++;
+      for(const n of sea){
+        if(terr[idx(txOf(n.x),tyOf(n.y))]!==T_WATER)dryFish++;
+        const mx=W-n.x,my=pl.sym==='pt'?H-n.y:n.y;
+        if(!sea.some(o=>Math.abs(o.x-mx)<1&&Math.abs(o.y-my)<1))asymFish++;
+      }
+      if(pl.dockD<0)noDock++;
+      if((pl.water==='lake'||pl.water==='arch')&&pl.dockD>24)farDock++;
+    }
+    const eng=(pl)=>{
+      terr.fill(T_PLAIN);dbg.applyGenTerrain(pl);nodes.length=0;dbg.applyGenNodes(pl);
+      units.length=0;villagers.length=0;buildings.length=0;blocked.fill(0);wallMask.fill(0);gateMask.fill(0);
+      paintTerrain();computeLandComp();explored.fill(1);exploredE.fill(1);dbg.setAiVision(true);
+      const [px,py]=pl.ptc;placeB(0,'tc',px,py,true);
+      dbg.AI_SEA.ready=false;dbg.aiSeaInit();
+      const spot=dbg.aiDockSpot(0);
+      const z=spot?dbg.aiZoneOf((spot.tx+1)*TILE,(spot.ty+1)*TILE):null;
+      return {water:pl.water,hasWater:dbg.AI_SEA.hasWater,zones:dbg.AI_SEA.zones.length,
+        spot:!!spot,canP:spot?canPlace('dock',spot.tx,spot.ty,undefined,0):false,
+        engD:spot?Math.max(Math.abs(spot.tx-(px+1)),Math.abs(spot.ty-(py+1))):-1,
+        zoneAmt:z?dbg.aiZoneAmt(z,0):0,planD:pl.dockD};
+    };
+    let ls=0,ss=0,as=0;for(let s=1;s<=60&&!(ls&&ss&&as);s++){const w=P(s).water;if(w==='lake'&&!ls)ls=s;if(w==='strait'&&!ss)ss=s;if(w==='arch'&&!as)as=s;}
+    const eLake=eng(P(ls)),eStr=eng(P(ss)),eArch=eng(P(as));
+    terr.set(savedTerr);nodes.length=0;for(const n of savedNodes)nodes.push(n);
+    buildings.length=0;for(const b of savedBld)buildings.push(b);
+    paintTerrain();blocked.set(savedBlk);computeLandComp();dbg.setAiVision(savedFV);dbg.AI_SEA.ready=false;
+    return {wMaps,lakeM,strM,archM,noFish,noDock,farDock,dryFish,asymFish,strayFish,ls,ss,as,eLake,eStr,eArch};`);
+  check('⚓ 漁場硬條款：60 種子·每張水圖都有漁場（≥2＝兩側各一）·全部落在深水·逐點對稱零破口·無水圖零漁場',
+    t111d.wMaps>0&&t111d.lakeM>0&&t111d.strM>0&&t111d.archM>0&&t111d.noFish===0&&t111d.dryFish===0&&t111d.asymFish===0&&t111d.strayFish===0, t111d);
+  check('⚓ 碼頭岸段硬條款：每張水圖都有「首都陸分量走得到＋那片水有魚」的合法碼頭格；湖圖/群島圖一律在家門口（≤24 格）',
+    t111d.noDock===0&&t111d.farDock===0, t111d);
+  check('⚓ AI 海軍腦真的開得起來（引擎側交叉驗·湖圖/海峽圖/群島圖各一）：hasWater＋漁場分區>0＋aiDockSpot 找得到位置＋該位置 canPlace 過＋分區有可採量',
+    t111d.eLake.hasWater===true&&t111d.eLake.zones>0&&t111d.eLake.spot===true&&t111d.eLake.canP===true&&t111d.eLake.zoneAmt>0&&t111d.eLake.engD<=24
+    &&t111d.eStr.hasWater===true&&t111d.eStr.zones>0&&t111d.eStr.spot===true&&t111d.eStr.canP===true&&t111d.eStr.zoneAmt>0
+    &&t111d.eArch.hasWater===true&&t111d.eArch.zones>0&&t111d.eArch.spot===true&&t111d.eArch.canP===true&&t111d.eArch.zoneAmt>0&&t111d.eArch.engD<=24, t111d);
+
+  console.log('\n[111e] 🏝️ 段F·F0 群島版型（2026-07-26 使用者「群島圖有不少島一開始是無人但有資源」）：全域深水打底＋刻回陸地——鎖住①資源零落海②每座有資源的島都「開拓中心擺得下＋碼頭蓋得起來」（引擎 canPlace 真跑·非生成器自說自話）③無人資源島 ≥3 座④兩家家門島陸不相連（隔海＝靠運輸/快艇）⑤逐格對稱照樣零破口');
+  const t111e = await ev(`
+    const P=dbg.genMapPlan;
+    const savedTerr=Uint8Array.from(terr),savedNodes=nodes.slice(),savedBld=buildings.slice(),
+          savedBlk=Uint8Array.from(blocked),savedFV=dbg.aiVision();
+    const D8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]],D4=[[1,0],[-1,0],[0,1],[0,-1]];
+    const lh=c=>c===T_HIGH?1:c===T_RAMP?0.5:0;
+    const seeds=[];for(let s=1;s<=100;s++)if(P(s).water==='arch')seeds.push(s);
+    let archM=0,strayRes=0,smallIsle=0,noIsleDock=0,noOutpost=0,fewUninh=0,landConn=0,asym=0,minIsles=99,minUninh=99;
+    for(const s of seeds.slice(0,8)){
+      const pl=P(s);
+      terr.fill(T_PLAIN);dbg.applyGenTerrain(pl);nodes.length=0;dbg.applyGenNodes(pl);
+      units.length=0;villagers.length=0;buildings.length=0;blocked.fill(0);wallMask.fill(0);gateMask.fill(0);
+      paintTerrain();computeLandComp();explored.fill(1);exploredE.fill(1);dbg.setAiVision(true);
+      archM++;
+      const pt=pl.sym==='pt';                                   // ⑤逐格對稱（公平硬條款·群島也不例外）
+      for(let y=0;y<TH;y++)for(let x=0;x<TW;x++){const j=pt?idx(TW-1-x,TH-1-y):idx(TW-1-x,y);if(terr[idx(x,y)]!==terr[j])asym++;}
+      const lc=new Int32Array(TW*TH).fill(-1),lsz=[];let ln=0;   // 陸分量＝島（引擎 8-連通＋高度差＝台地口袋會被算成另一座島）
+      for(let i=0;i<TW*TH;i++){if(terr[i]===T_WATER||lc[i]>=0)continue;lc[i]=ln;let n=0;const st=[i];
+        while(st.length){const cur=st.pop(),cx=cur%TW,cy=(cur/TW)|0,hc=lh(terr[cur]);n++;
+          for(const [dx,dy] of D8){const nx=cx+dx,ny=cy+dy;if(nx<0||ny<0||nx>=TW||ny>=TH)continue;const ni=idx(nx,ny);
+            if(lc[ni]>=0||terr[ni]===T_WATER)continue;if(Math.abs(lh(terr[ni])-hc)>0.5)continue;lc[ni]=ln;st.push(ni);}}
+        lsz.push(n);ln++;}
+      minIsles=Math.min(minIsles,ln);
+      const resC=new Set();                                      // ①資源零落海＋收集「有資源的島」
+      for(const n of nodes){if(n.sea)continue;const i=idx(txOf(n.x),tyOf(n.y));if(terr[i]===T_WATER)strayRes++;else resC.add(lc[i]);}
+      const dockC=new Set();                                     // ②-a 引擎 canPlace('dock') 真的過的岸段屬於哪些島
+      for(let ty=0;ty<TH-1;ty++)for(let tx=0;tx<TW-1;tx++){
+        if(terr[idx(tx,ty)]!==T_WATER||terr[idx(tx+1,ty)]!==T_WATER||terr[idx(tx,ty+1)]!==T_WATER||terr[idx(tx+1,ty+1)]!==T_WATER)continue;
+        let shore=false;                                         // 便宜的預篩（canPlace 每次掃全部 nodes＝只在真的像岸邊時才問它）
+        for(let y=ty;y<ty+2&&!shore;y++)for(let x=tx;x<tx+2&&!shore;x++)for(const [dx,dy] of D4){
+          const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=TW||ny>=TH)continue;const c=terr[idx(nx,ny)];if(c===T_PLAIN||c===T_HIGH){shore=true;break;}}
+        if(!shore||!canPlace('dock',tx,ty,undefined,0))continue;
+        for(let y=ty;y<ty+2;y++)for(let x=tx;x<tx+2;x++)for(const [dx,dy] of D4){
+          const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=TW||ny>=TH)continue;const ni=idx(nx,ny);
+          if(terr[ni]===T_PLAIN||terr[ni]===T_HIGH)dockC.add(lc[ni]);}
+      }
+      const [px,py]=pl.ptc;                                      // ④兩家家門島＝不同陸分量
+      const h0=lc[idx(px-1,py)],h1=pt?lc[idx(TW-1-(px-1),TH-1-py)]:lc[idx(TW-1-(px-1),py)];
+      if(h0===h1)landConn++;
+      let uninh=0;
+      for(const c of resC){
+        if(lsz[c]<40)smallIsle++;
+        if(!dockC.has(c))noIsleDock++;
+        if(c===h0||c===h1)continue;
+        uninh++;                                                 // ②-b 無人島要擺得下開拓中心 2×2（F1 的前置＝開拓隊上島要蓋得成）
+        let ok=false;
+        for(let ty=1;ty<TH-2&&!ok;ty++)for(let tx=1;tx<TW-2;tx++){
+          if(lc[idx(tx,ty)]!==c||terr[idx(tx,ty)]!==T_PLAIN)continue;
+          if(canPlace('outpost',tx,ty,undefined,0)){ok=true;break;}}
+        if(!ok)noOutpost++;
+      }
+      minUninh=Math.min(minUninh,uninh);
+      if(uninh<3)fewUninh++;
+    }
+    terr.set(savedTerr);nodes.length=0;for(const n of savedNodes)nodes.push(n);
+    buildings.length=0;for(const b of savedBld)buildings.push(b);
+    paintTerrain();blocked.set(savedBlk);computeLandComp();dbg.setAiVision(savedFV);dbg.AI_SEA.ready=false;
+    return {seedN:seeds.length,archM,strayRes,smallIsle,noIsleDock,noOutpost,fewUninh,landConn,asym,minIsles,minUninh,seeds:seeds.slice(0,8)};`);
+  check('🏝️ 群島版型生得出來（100 種子中 ≥5 張·抽 8 張逐張驗）＋逐格對稱零破口＋每張圖島數 ≥5（兩家門島＋≥3 無人島）',
+    t111e.seedN>=5&&t111e.archM>=5&&t111e.asym===0&&t111e.minIsles>=5, t111e);
+  check('🏝️ 「生得出來就要用得到」逐島版：資源零落海（0）＋每座有資源的島都 ≥40 格、都有引擎 canPlace 過的碼頭岸段（0 破口）',
+    t111e.strayRes===0&&t111e.smallIsle===0&&t111e.noIsleDock===0, t111e);
+  check('🏝️ 無人資源島 ≥3 座/張＋每座都擺得下開拓中心 2×2（引擎 canPlace 真跑＝F1 開拓隊上島蓋得成）＋兩家家門島陸不相連（隔海）',
+    t111e.fewUninh===0&&t111e.noOutpost===0&&t111e.landConn===0&&t111e.minUninh>=3, t111e);
+
   console.log('\n[112] closing the naval triangle: war galley range back to 150 (shore bombardment and attacking buildings belong to the siege ship; the feudal navy\'s job is blockade) + fire ship speed 104→90 (so the siege ship gets two volleys off and its splash catches massed fire ships) = the triangle closes on fleets alone');
   const t112 = await ev(`
     const R={};
@@ -6551,9 +6724,9 @@ try {
     startResearch(techById('M1'),0);                     /* Something on the research track. */
     issueTagOrder(0,enemyTC.x-400,enemyTC.y);            /* Our g0 sorties, giving us units on the march plus order flags. */
     for(let i=0;i<1800;i++)step(TICK);
+    for(const k of ['wood','stone','iron','gold','food'])dbg.give(k,900);
     queueUnit(bar,'archer');queueUnit(bar,'archer');      /* Something in the production queue at save time — production progress has to survive too. */
     trainVillager(ptc);
-    for(const k of ['wood','stone','iron','gold','food'])dbg.give(k,900);
     for(const x of TECH){if(techOf(0).track)break;if(!techOf(0).researched.has(x.id))startResearch(x,0);} /* One research must be in progress; the ones already finished double as a check that the researched set
    comes back. */
     R.warm={u:units.length,v:villagers.length,b:buildings.length,t:+t.toFixed(2)};
@@ -6703,6 +6876,1098 @@ try {
   check('反漏洞：降效中補糧到 10 但短於 RECOVER_INT＝降效不解、倒數不歸零（舊碼此處 starveN 秒歸 0＝花錢跳懲罰）', t124.briefFeedNoClear, t124);
   check('真恢復救得回：糧連續 ≥10 撐滿 RECOVER_INT＝退一格＝starveN<3 才解降效（經濟真修好＝懲罰該解）', t124.sustainedRecovers, t124);
   check('節流是「連續 ≥10」判定：中途跌破 10 就重置恢復計時＝震盪補糧湊不滿窗＝懲罰黏住（重赤字跳不掉）', t124.oscillNoRecover, t124);
+
+
+  console.log('\n[125] 🚢 跨海登陸攻擊（段E·2026-07-24）：灘頭選點引擎側交叉驗＋狀態機逐相位＋中止條件＋護衛');
+  const t125 = await ev(`
+    units.length=0;villagers.length=0;buildings.length=0;blocked.fill(0);wallMask.fill(0);gateMask.fill(0);scouts.length=0;nodes.length=0;
+    aiWave=99999;aiDefT=1e9;arenaMode=false;gameOver=null;aiFullVision=false;
+    for(const k in stock)stock[k]=1e9;for(const k in stockOf(1))stockOf(1)[k]=1e9;starving=false;starveN=0;
+    terr.fill(T_PLAIN);trect(20,0,24,TH,T_WATER);paintTerrain();
+    explored.fill(1);exploredE.fill(1);computeLandComp();pathCompDirty=true;
+    const myTC=placeB(0,'tc',6,12,true), foeTC=placeB(1,'tc',54,12,true);
+    const dk=placeB(0,'dock',20,12,true);
+    foeTC.seen=true;foeTC.seenE=true;dk.seen=true;
+    aiSeaInit();dbg.setAiSide(0,false);dbg.setAiSide(1,false);
+    computeDanger();
+    A(0).wtgtB=null;A(0).wtgtT=-1e9;A(0).breach=null;A(1).wtgtB=null;A(1).wtgtT=-1e9;A(1).breach=null;
+    const R={};
+    R.cross=aiCrossWater(0);
+    R.tgt=!!aiAmphTgt(0);
+    for(let x=20;x<44;x++)terr[idx(x,26)]=T_SHALLOW;
+    paintTerrain();computeLandComp();pathCompDirty=true;ensurePathComp();
+    R.fordNoAmph=!aiAmphTgt(0)&&!aiCrossWater(0);
+    for(let x=20;x<44;x++)terr[idx(x,26)]=T_WATER;
+    paintTerrain();computeLandComp();pathCompDirty=true;ensurePathComp();
+    const lp=dockLaunch(dk);const wc=(ensurePathComp(),pathCompW[idx(txOf(lp.x),tyOf(lp.y))]);
+    const b1=aiBeachSpot(0,foeTC,wc);
+    R.beach=!!b1;
+    if(b1){
+      const bi=idx(txOf(b1.x),tyOf(b1.y));
+      R.bSameComp=pathCompL[bi]===dbg.aiPCompNear(foeTC.x,foeTC.y);
+      R.bReachable=findPath(b1.x,b1.y,foeTC.x,foeTC.y,0).length>0;
+      R.bStand=!blocked[bi]&&terr[bi]!==T_WATER;
+      R.bWaterOK=pathCompW[idx(txOf(b1.w.x),tyOf(b1.w.y))]===wc;
+      R.bNear=Math.hypot(b1.x-foeTC.x,b1.y-foeTC.y)<Math.hypot(lp.x-foeTC.x,lp.y-foeTC.y);
+    }
+    const twr=placeB(1,'tower',txOf(b1.x),tyOf(b1.y)+2,true);twr.seen=true;twr.seenE=true;
+    computeDanger();pathCompDirty=true;
+    const b2=aiBeachSpot(0,foeTC,wc);
+    R.beachAvoidsTower=!!b2&&Math.hypot(b2.x-twr.x,b2.y-twr.y)>=defFireRange(twr);
+    twr.seen=false;twr.seenE=false;computeDanger();
+    const b3=aiBeachSpot(0,foeTC,wc);
+    R.unseenTowerIgnored=!!b3&&Math.hypot(b3.x-twr.x,b3.y-twr.y)<Math.hypot(b2.x-twr.x,b2.y-twr.y)+1;
+    buildings=buildings.filter(b=>b!==twr);computeDanger();
+    const A0=A(0);A0.amph=null;A0.amphT=-1e9;A0.waveReq=0;A0.thr=null;
+    const T1=spawnUnit(0,'transport',20.5*TILE,12.5*TILE,tags[3]);
+    const T2=spawnUnit(0,'transport',21.5*TILE,13.5*TILE,tags[3]);
+    const g1=spawnUnit(0,'galley',22.5*TILE,12.5*TILE,tags[3]);
+    const g2=spawnUnit(0,'galley',22.5*TILE,13.5*TILE,tags[3]);
+    const troops=[];for(let i=0;i<8;i++)troops.push(spawnUnit(0,'spear',(17.5-(i%2))*TILE,(10.5+i*0.5)*TILE,tags[AI_G.reinf]));
+    aiAmphStart(0);
+    R.started=!!A0.amph&&A0.amph.phase==='gather';
+    const phases=['gather'];let landedAt=-1;R.trace=[];
+    for(let k=0;k<30*260;k++){
+      step(TICK);
+      if(!R.atkLatch&&A0.atkOut===true&&A0.atkTgt===foeTC)R.atkLatch=true;
+      if(k%60===0){
+        const m0=A0.amph;const ph0=m0?m0.phase:'-';
+        if(phases[phases.length-1]!==ph0)phases.push(ph0);
+        R.trace.push([Math.round(t),ph0,(T1.cargo||[]).length,(T2.cargo||[]).length,
+          units.filter(u=>u.side===0&&u.boardTgt).length,units.filter(u=>u.side===0&&u.grp===tags[AI_G.reinf]&&!u.gar).length]);
+        aiAmphTick(0);
+        if(!m0&&landedAt<0&&phases.indexOf('land')>=0)landedAt=Math.round(t);}
+      if(landedAt>0)break;
+    }
+    R.phases=phases;
+    R.seq=['gather','load','sail','land','-'].every((p,i)=>phases[i]===p);
+    const fc=dbg.aiPCompNear(foeTC.x,foeTC.y);
+    const far=troops.filter(u=>u.hp>0&&!u.gar&&dbg.aiPCompNear(u.x,u.y)===fc);
+    R.landedN=far.length;R.landedX=far.length?Math.round(txOf(far[0].x)):-1;
+    R.landedTag=far.length?far.every(u=>u.grp===tags[AI_G.main]):false;
+    R.atkOut=A0.atkOut===true&&A0.atkTgt===foeTC;
+    const stay=troops.filter(u=>u.hp>0&&!u.gar&&dbg.aiPCompNear(u.x,u.y)!==fc);
+    R.stayN=stay.length;
+    R.stayRes=stay.every(u=>u.grp===tags[AI_G.reinf]);
+    R.noGhost=troops.every(u=>u.hp<=0||!u.gar||units.indexOf(u.gar)>=0);
+    R.escortSent=true;
+    A0.amph=null;A0.amphT=-1e9;
+    for(const u of units.slice())if(u.side===0&&txOf(u.x)>=44)u.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    for(let i=0;i<8;i++)spawnUnit(0,'spear',17.5*TILE,(10.5+i*0.5)*TILE,tags[AI_G.reinf]);
+    A0.thr={x:myTC.x+40,y:myTC.y,s:99};
+    aiAmphStart(0);R.homeSiegeNoStart=!A0.amph;
+    A0.thr=null;A0.amphT=-1e9;aiAmphStart(0);R.restart=!!A0.amph;
+    A0.amph.phase='sail';A0.amph.pT=t;A0.amph.T=[T1];T1.cargo=T1.cargo||[];
+    T1.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    aiAmphTick(0);R.sunkAbort=!A0.amph;
+    A0.amphT=-1e9;aiAmphStart(0);
+    if(A0.amph){A0.amph.pT=t-999;aiAmphTick(0);}
+    R.timeoutAbort=!A0.amph;
+    units.length=0;villagers.length=0;buildings.length=0;nodes.length=0;
+    terr.fill(T_PLAIN);paintTerrain();computeLandComp();pathCompDirty=true;
+    A(0).amph=null;A(0).amphT=-1e9;A(0).atkOut=false;A(0).atkTgt=null;A(0).thr=null;
+    gameOver=null;
+    return R;`);
+  check('段E·跨海判定：陸路隔死＝有跨海標的；補一條淺灘渡口＝不開登陸任務（陸軍自己走過去）',
+    t125.cross===true&&t125.tgt===true&&t125.fordNoAmph===true, t125);
+  check('段E·灘頭選點（引擎側交叉驗）：與敵中樞同陸塊、findPath 真的走得到、站得住、停船點與自家碼頭同水路分量',
+    t125.beach===true&&t125.bSameComp===true&&t125.bReachable===true&&t125.bStand===true&&t125.bWaterOK===true&&t125.bNear===true, t125);
+  check('段E·灘頭避開已知敵防禦火圈（不卸在箭塔臉上）·沒看過的塔不算（誠實視野一體適用）',
+    t125.beachAvoidsTower===true&&t125.unseenTowerIgnored===true, t125);
+  check('段E·狀態機逐相位：gather→load→sail→land→結束（含實際航行/卸載·非假裝推進）',
+    t125.started===true&&t125.seq===true, {phases:t125.phases});
+  check('段E·兵真的上了對岸：登陸部隊落在敵方陸塊·且交還攻兵團 g0＋開波（不另立第四種兵團）',
+    t125.landedN>=4&&t125.landedTag===true&&t125.atkLatch===true&&t125.noGhost===true, t125);
+  check('段E2·交還攻兵團是**逐兵**的：只有真的站上對岸的轉進 g0·沒擠上船的留在備兵（段E 的已知不精確已修）',
+    t125.landedTag===true&&(t125.stayN===0||t125.stayRes===true), t125);
+  check('段E·中止條件：家門被圍不出發／運輸艦全沉＝任務失敗／phase 逾時＝棄任務（三條都是防卡死的硬條款）',
+    t125.homeSiegeNoStart===true&&t125.restart===true&&t125.sunkAbort===true&&t125.timeoutAbort===true, t125);
+
+  console.log('\n[127] 🚤 斥候水上型態＝偵察快艇（段F 前置·2026-07-25）：log 級上限／N7 解鎖／轉換 2 秒／陸路優先（有橋不渡河）');
+  const t127 = await ev(`
+    units.length=0;villagers.length=0;buildings.length=0;scouts.length=0;nodes.length=0;
+    blocked.fill(0);wallMask.fill(0);gateMask.fill(0);
+    aiWave=99999;aiDefT=1e9;arenaMode=false;gameOver=null;aiFullVision=false;
+    for(const k in stock)stock[k]=1e9;
+    const R={};
+    R.cap=SCOUT_CAP; R.capLog=2+Math.max(0,Math.floor(Math.log2(TW*TH/1296)));
+    R.capNotLinear=SCOUT_CAP < Math.round(2*TW*TH/1296);
+    const n7=techById('N7');
+    R.n7=!!n7; R.n7tier=n7?n7.tier:null; R.n7at=n7?n7.at:null; R.n7wired=WIRED.has('N7');
+    terr.fill(T_PLAIN); trect(20,3,27,TH-1,T_WATER); paintTerrain();
+    explored.fill(0);exploredE.fill(0);visible.fill(0);visibleE.fill(0);
+    for(let y=0;y<TH;y++)for(let x=0;x<24;x++)explored[idx(x,y)]=1;
+    computeLandComp();pathCompDirty=true;ensurePathComp();
+    const myTC=placeB(0,'tc',6,12,true), foeTC=placeB(1,'tc',54,40,true);
+    dbg.setAiSide(0,false);dbg.setAiSide(1,false);computeDanger();gameOver=null;
+    spawnScout(myTC); const sc=scouts[scouts.length-1];
+    sc.x=19.5*TILE; sc.y=12.5*TILE; sc.mode='explore'; sc.expT=null; sc.manual=false;
+    playerTech.researched.delete('N7'); recomputeTechMod(0);
+    R.noTechFlag=modOf(0).seaScout===0;
+    R.noTechMorph=scoutMorphStart(sc,true)===false;
+    R.noTechCross=scoutCrossPlan(sc,0)===null;
+    playerTech.researched.add('N7'); recomputeTechMod(0);
+    R.techFlag=modOf(0).seaScout===1;
+    R.bridgeSameComp=pathCompL[idx(10,12)]===pathCompL[idx(40,12)];
+    sc.mode='explore';sc.expT=null;sc.manual=false;sc.aiDir=false;sc.sea=false;sc.dom=undefined;sc.crossPt=null;
+    let sawSea=false;
+    for(let i=0;i<600;i++){step(TICK);if(sc.sea||sc.crossPt||sc.morphT>0)sawSea=true;}
+    R.bridgeNoCross=!sawSea;
+    trect(20,0,27,2,T_WATER); paintTerrain(); computeLandComp();pathCompDirty=true;ensurePathComp();
+    R.cutSplit=pathCompL[idx(10,12)]!==pathCompL[idx(40,12)];
+    const cp=scoutCrossPlan(sc,0);
+    R.cutCross=!!cp;
+    sc.x=19.5*TILE;sc.y=12.5*TILE;sc.sea=false;sc.dom=undefined;sc.morphT=0;sc.morphSpot=null;
+    unreachable.fill(0);
+    for(let y=0;y<TH;y++)for(let x=0;x<24;x++)explored[idx(x,y)]=1;
+    sc.mode='explore';sc.expT=null;sc.manual=false;sc.crossPt=null;sc.repathT=0;
+    let wentSea=false;
+    for(let i=0;i<900;i++){step(TICK);if(sc.sea||sc.crossPt||sc.morphT>0){wentSea=true;break;}}
+    R.cutGoesSea=wentSea;
+    sc.sea=false;sc.dom=undefined;sc.crossPt=null;sc.morphT=0;sc.morphSpot=null;
+    R.crossOnLand=!!cp&&terr[idx(txOf(cp.x),tyOf(cp.y))]!==T_WATER;
+    sc.x=19.5*TILE;sc.y=12.5*TILE;sc.path=[];sc.dest=null;
+    R.morphStart=scoutMorphStart(sc,true)===true;
+    R.morphT0=+sc.morphT.toFixed(2); R.morphIs2=Math.abs(sc.morphT-SCT_SEA.morph)<1e-6;
+    const px0=sc.x,py0=sc.y;
+    const nMid=Math.floor(1.0/TICK), nRest=Math.ceil(2.4/TICK);
+    for(let i=0;i<nMid;i++)step(TICK);
+    R.midStillLand=sc.sea===false&&sc.morphT>0;
+    R.midNoMove=Math.abs(sc.x-px0)<0.01&&Math.abs(sc.y-py0)<0.01;
+    for(let i=0;i<nRest;i++)step(TICK);
+    R.nowSea=sc.sea===true; R.domWater=sc.dom==='water';
+    R.onWater=terr[idx(txOf(sc.x),tyOf(sc.y))]===T_WATER;
+    R.visSea=scoutVis(sc); R.visLand=SCT.vis;
+    R.spSea=scoutSp(sc);
+    R.fasterThanShips=SCT_SEA.sp>Math.max(UT.galley.sp,UT.fireship.sp,UT.siegeship.sp,UT.transport.sp);
+    R.slowerThanHorse=SCT_SEA.sp<SCT.sp;
+    const fs=spawnUnit(0,'fireship',sc.x+30,sc.y,tags[3]);
+    const sp2=spawnUnit(1,'spear',sc.x+30,sc.y,tags[1]);
+    R.isWater=isWaterUnit(sc)===true;
+    R.shipCanHit=canMelee(fs,sc)===true;
+    R.landCannotHit=canMelee(sp2,sc)===false;
+    units.length=0;
+    explored.fill(1);
+    R.backHome=!!scoutCrossPlan(sc,0,true);
+    trect(20,0,27,2,T_PLAIN); paintTerrain(); computeLandComp();pathCompDirty=true;ensurePathComp();
+    explored.fill(1);exploredE.fill(1);unreachable.fill(0);
+    const drag=(tx,ty)=>{
+      sc.x=10.5*TILE;sc.y=12.5*TILE;sc.sea=false;sc.dom=undefined;sc.crossPt=null;sc.morphT=0;sc.morphSpot=null;
+      sc.mode='explore';sc.expT=null;sc.manual=false;sc.path=[];sc.dest=null;
+      sc.nudge={x:tx*TILE+20,y:ty*TILE+20};
+      let everSea=false;
+      for(let i=0;i<900;i++){step(TICK);if(sc.sea)everSea=true;}
+      return everSea;
+    };
+    R.dragWater=drag(23,12);
+    R.dragFarLand=drag(40,12);
+    R.dragOwnLand=drag(15,20);
+    return R;
+  `);
+  check('段F前置·斥候上限＝log 級（128×72→4）·不是面積等比（等比會是 14）',
+    t127.cap===4 && t127.cap===t127.capLog && t127.capNotLinear===true, {cap:t127.cap});
+  check('段F前置·N7 偵察快艇＝封建(tier1)·碼頭研發·已接線',
+    t127.n7===true && t127.n7tier===1 && t127.n7at==='dock' && t127.n7wired===true, {tier:t127.n7tier,at:t127.n7at});
+  check('段F前置·沒研發 N7＝斥候不可能下水（旗、morph、換域規劃三道都關著）',
+    t127.noTechFlag===true && t127.noTechMorph===true && t127.noTechCross===true, t127);
+  check('段F前置·🔑 有陸路就不走水路：兩岸有橋＝跑 600 步一次都沒想下水（行為級·守門的是 crossPlan 的呼叫點）',
+    t127.techFlag===true && t127.bridgeSameComp===true && t127.bridgeNoCross===true, t127);
+  check('段F前置·反證：橋斷了（陸路不可達）就真的會下水＝上一條不是「它從來不下水」的假通過·下水點是岸上陸格',
+    t127.cutSplit===true && t127.cutCross===true && t127.cutGoesSea===true && t127.crossOnLand===true, t127);
+  check('段F前置·轉換 2 秒且期間站著不動（棄馬取艇＝敘事時間·也是在敵人面前下水要付的代價）',
+    t127.morphStart===true && t127.morphIs2===true && t127.midStillLand===true && t127.midNoMove===true, t127);
+  check('段F前置·轉換完成＝sea/dom 切換·人真的在水格上（不是站陸格假裝）',
+    t127.nowSea===true && t127.domWater===true && t127.onWater===true, t127);
+  check('段F前置·水上視野 9→6·移速 102＞全部戰鬥艦且＜陸上 130',
+    t127.visSea===6 && t127.visLand===9 && t127.spSea===102 && t127.fasterThanShips===true && t127.slowerThanHorse===true, t127);
+  check('段F前置·快艇算水域單位：火船打得到、陸上近戰打不到（跨域閘不會反過來）',
+    t127.isWater===true && t127.shipCanHit===true && t127.landCannotHit===true, t127);
+  check('段F前置·海上無事可做＝規劃回岸上馬（不掉進遠觀/隨機走那套陸上邏輯）', t127.backHome===true, t127);
+  check('段F前置·玩家手動拖放三情境：拖到水面＝下水／拖到對岸但有橋＝繞陸地不下水／拖到自家島內＝不下水',
+    t127.dragWater===true && t127.dragFarLand===false && t127.dragOwnLand===false,
+    {水面:t127.dragWater,對岸有橋:t127.dragFarLand,自家島內:t127.dragOwnLand});
+
+  console.log('\n[126] 🚢 段E2 登陸投送強化（2026-07-24）：兩段門檻＋安全閥／灘頭避開敵主力／登陸不撤退／崖隔死＝走海路');
+  const t126a = await ev(`
+    units.length=0;villagers.length=0;buildings.length=0;blocked.fill(0);wallMask.fill(0);gateMask.fill(0);scouts.length=0;nodes.length=0;
+    aiWave=99999;aiDefT=1e9;arenaMode=false;gameOver=null;aiFullVision=false;
+    for(const k in stock)stock[k]=1e9;for(const k in stockOf(1))stockOf(1)[k]=1e9;starving=false;starveN=0;
+    terr.fill(T_PLAIN);trect(20,0,24,TH,T_WATER);paintTerrain();
+    explored.fill(1);exploredE.fill(1);visible.fill(0);visibleE.fill(0);
+    computeLandComp();pathCompDirty=true;ensurePathComp();
+    const myTC=placeB(0,'tc',6,12,true), foeTC=placeB(1,'tc',54,12,true);
+    const dk=placeB(0,'dock',20,12,true);
+    foeTC.seen=true;foeTC.seenE=true;dk.seen=true;
+    aiSeaInit();dbg.setAiSide(0,false);dbg.setAiSide(1,false);computeDanger();
+    const R={},A0=A(0);A0.amph=null;A0.amphT=-1e9;A0.thr=null;
+    spawnUnit(0,'transport',20.5*TILE,12.5*TILE,tags[3]);spawnUnit(0,'transport',21.5*TILE,13.5*TILE,tags[3]);
+    spawnUnit(0,'galley',22.5*TILE,12.5*TILE,tags[3]);spawnUnit(0,'galley',22.5*TILE,13.5*TILE,tags[3]);
+    const mk=n=>{const a=[];for(let i=0;i<n;i++)a.push(spawnUnit(0,'spear',(17.5-(i%2))*TILE,(8.5+i*0.5)*TILE,tags[AI_G.reinf]));return a;};
+    const resStr=()=>units.filter(u=>u.side===0&&isLandMil(u)&&u.grp===tags[AI_G.reinf]&&!u.gar).reduce((s,u)=>s+uStr(u),0);
+    const wave1=mk(8);const S1=resStr();
+    A0.waveReq=+(S1/2).toFixed(3);
+    aiAmphStart(0);R.startLow=!!A0.amph;
+    aiAmphTick(0);R.holdAtLow=!!A0.amph&&A0.amph.phase==='gather';
+    R.needS=A0.amph?A0.amph.needS:null;
+    R.needIsFull=!!A0.amph&&Math.abs(A0.amph.needS-A0.waveReq*AI_AMPH_WAVE)<0.05;
+    R.ratio=+(AI_AMPH_WAVE).toFixed(2);
+    mk(8);
+    aiAmphTick(0);R.loadAtFull=!!A0.amph&&A0.amph.phase==='load';
+    A0.amph=null;A0.amphT=-1e9;
+    for(const u of units.slice())if(u.side===0&&isLandMil(u)&&wave1.indexOf(u)<0)u.hp=0;
+    units=units.filter(u=>u.hp>0||u.gar);
+    R.backToS1=Math.abs(resStr()-S1)<0.01;
+    aiAmphStart(0);R.valveStart=!!A0.amph;
+    if(A0.amph){A0.amph.pT=t-AI_AMPH_TO.gather*(AI_AMPH_GOT+0.02);aiAmphTick(0);}
+    R.valveLoad=!!A0.amph&&A0.amph.phase==='load';
+    R.valveNeed=A0.amph?A0.amph.needS:null;
+    A0.amph=null;A0.amphT=-1e9;
+    const lp=dockLaunch(dk),wc=pathCompW[idx(txOf(lp.x),tyOf(lp.y))];
+    const bBase=aiBeachSpot(0,foeTC,wc);
+    for(let i=0;i<6;i++)spawnUnit(1,'spear',(27.5+i*0.5)*TILE,(12.5+(i%2))*TILE,tagsOf(1)[AI_G.main]);
+    aiFullVision=true;const bSee=aiBeachSpot(0,foeTC,wc);const mass=aiFoeMass(0);
+    R.massN=mass.length;
+    R.avoidFar=!!bSee&&mass.every(p=>Math.hypot(p.x-bSee.x,p.y-bSee.y)>=AI_AMPH_FOER);
+    const cen=mass[mass.length-1];
+    R.avoidMoved=!!bSee&&!!bBase&&Math.hypot(bSee.x-cen.x,bSee.y-cen.y)>Math.hypot(bBase.x-cen.x,bBase.y-cen.y);
+    aiFullVision=false;const bBlind=aiBeachSpot(0,foeTC,wc);
+    R.blindSame=!!bBlind&&!!bBase&&bBlind.x===bBase.x&&bBlind.y===bBase.y;
+    units.length=0;villagers.length=0;buildings.length=0;nodes.length=0;
+    terr.fill(T_PLAIN);paintTerrain();computeLandComp();pathCompDirty=true;
+    A(0).amph=null;A(0).amphT=-1e9;A(0).atkOut=false;A(0).atkTgt=null;A(0).thr=null;gameOver=null;
+    return R;`);
+  check('段E2·兩段門檻：1.4 波開得了任務（船要造·兵要走·早開才來得及）·但沒到 2.2 波不開船；補到 2 倍＝開船',
+    t126a.startLow===true&&t126a.holdAtLow===true&&t126a.needIsFull===true&&t126a.loadAtFull===true, t126a);
+  check('段E2·安全閥：gather 過了七成逾時還湊不到 2.2 波＝降到 1.4 波有多少送多少（純硬門檻＝某些圖一次都不登陸）',
+    t126a.backToS1===true&&t126a.valveStart===true&&t126a.valveLoad===true&&t126a.valveNeed<t126a.needS, t126a);
+  check('段E2·灘頭避開已知敵主力（中樞＋看得見的敵軍質心 ≥AI_AMPH_FOER）·看不到的敵軍不算（誠實視野一體適用）',
+    t126a.massN===2&&t126a.avoidFar===true&&t126a.avoidMoved===true&&t126a.blindSame===true, t126a);
+
+  const t126b = await ev(`
+    units.length=0;villagers.length=0;buildings.length=0;blocked.fill(0);wallMask.fill(0);gateMask.fill(0);scouts.length=0;nodes.length=0;
+    aiWave=99999;aiDefT=1e9;arenaMode=false;gameOver=null;aiFullVision=false;
+    for(const k in stock)stock[k]=1e9;for(const k in stockOf(1))stockOf(1)[k]=1e9;
+    terr.fill(T_PLAIN);trect(0,60,TW-1,TH-1,T_WATER);trect(30,0,33,59,T_HIGH);paintTerrain();
+    explored.fill(1);exploredE.fill(1);computeLandComp();pathCompDirty=true;ensurePathComp();
+    const myTC=placeB(0,'tc',10,20,true), foeTC=placeB(1,'tc',50,20,true);
+    const dk=placeB(0,'dock',12,60,true);
+    foeTC.seen=true;foeTC.seenE=true;dk.seen=true;
+    aiSeaInit();dbg.setAiSide(0,false);dbg.setAiSide(1,false);computeDanger();
+    const R={};
+    R.sameIsland=terr[idx(20,20)]===T_PLAIN&&terr[idx(50,20)]===T_PLAIN;
+    R.cliffSplit=dbg.aiPCompNear(myTC.x,myTC.y)!==dbg.aiPCompNear(foeTC.x,foeTC.y);
+    R.crossByCliff=aiCrossWater(0)&&!!aiAmphTgt(0);
+    const lp=dockLaunch(dk),wc=pathCompW[idx(txOf(lp.x),tyOf(lp.y))];
+    R.beachByCliff=!!aiBeachSpot(0,aiAmphTgt(0),wc);
+    for(let y=20;y<=24;y++)for(let x=30;x<=33;x++)terr[idx(x,y)]=T_RAMP;
+    paintTerrain();computeLandComp();pathCompDirty=true;ensurePathComp();
+    R.rampNoAmph=!aiCrossWater(0)&&!aiAmphTgt(0);
+    units.length=0;buildings.length=0;
+    terr.fill(T_WATER);trect(0,0,20,TH-1,T_PLAIN);trect(44,10,49,18,T_PLAIN);paintTerrain();
+    computeLandComp();pathCompDirty=true;ensurePathComp();
+    const myTC2=placeB(0,'tc',6,20,true),foeTC2=placeB(1,'tc',45,13,true),dk2=placeB(0,'dock',20,20,true);
+    foeTC2.seen=true;foeTC2.seenE=true;aiSeaInit();computeDanger();
+    const lp2=dockLaunch(dk2),wc2=pathCompW[idx(txOf(lp2.x),tyOf(lp2.y))];
+    aiFullVision=true;
+    for(let i=0;i<4;i++)spawnUnit(1,'spear',(46.5+i*0.4)*TILE,15.5*TILE,tagsOf(1)[AI_G.main]);
+    const mass2=aiFoeMass(0),b2=aiBeachSpot(0,foeTC2,wc2);
+    R.islandAllHot=mass2.length>0&&b2!==null&&mass2.some(p=>Math.hypot(p.x-b2.x,p.y-b2.y)<AI_AMPH_FOER);
+    R.islandBeach=!!b2&&pathCompL[idx(txOf(b2.x),tyOf(b2.y))]===dbg.aiPCompNear(foeTC2.x,foeTC2.y);
+    aiFullVision=false;
+    units.length=0;villagers.length=0;buildings.length=0;nodes.length=0;
+    terr.fill(T_PLAIN);paintTerrain();computeLandComp();pathCompDirty=true;
+    A(0).amph=null;A(0).amphT=-1e9;A(0).atkOut=false;A(0).atkTgt=null;gameOver=null;
+    return R;`);
+  check('段E2·崖隔死的同一塊陸地＝照樣走海路（pathCompL 是引擎真判準·高度轉移規則同 canStep）；補坡道＝陸路通了就不出船',
+    t126b.sameIsland===true&&t126b.cliffSplit===true&&t126b.crossByCliff===true&&t126b.beachByCliff===true&&t126b.rampNoAmph===true, t126b);
+  check('段E2·灘頭避敵是**軟條款**：整座島都在敵主力火力半徑內＝退回舊規則照樣挑得出灘頭（挑不到就不登陸＝這張圖一次都不出兵）',
+    t126b.islandAllHot===true&&t126b.islandBeach===true, t126b);
+
+  const t126c = await ev(`
+    units.length=0;villagers.length=0;buildings.length=0;blocked.fill(0);wallMask.fill(0);gateMask.fill(0);scouts.length=0;nodes.length=0;
+    aiWave=99999;aiDefT=1e9;arenaMode=false;gameOver=null;
+    for(const k in stock)stock[k]=1e9;for(const k in stockOf(1))stockOf(1)[k]=1e9;starving=false;starveN=0;
+    terr.fill(T_PLAIN);trect(20,0,25,TH-1,T_WATER);paintTerrain();
+    explored.fill(1);exploredE.fill(1);computeLandComp();pathCompDirty=true;ensurePathComp();
+    const myTC=placeB(0,'tc',14,12,true), foeTC=placeB(1,'tc',40,12,true);
+    const dk=placeB(0,'dock',20,12,true);
+    foeTC.seen=true;foeTC.seenE=true;dk.seen=true;
+    aiSeaInit();dbg.setAiSide(0,false);dbg.setAiSide(1,false);computeDanger();
+    const R={},A0=A(0);A0.amph=null;A0.amphT=-1e9;
+    aiFullVision=true;
+    const mkMain=(tx,ty,n)=>{const a=[];for(let i=0;i<n;i++)a.push(spawnUnit(0,'spear',(tx+i*0.4)*TILE,ty*TILE,tags[AI_G.main]));return a;};
+    const ash1=mkMain(27.5,12.5,4);
+    R.ashore=!!aiAshore(0)&&aiAshore(0).c===dbg.aiPCompNear(foeTC.x,foeTC.y);
+    for(const u of ash1)u.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    const home1=mkMain(12.5,12.5,4);
+    R.homeNotAshore=aiAshore(0)===null;
+    for(const u of home1)u.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    const foeRaid=[];for(let i=0;i<8;i++)foeRaid.push(spawnUnit(1,'spear',(15.5+i*0.3)*TILE,12.5*TILE,tagsOf(1)[AI_G.main]));
+    const across=mkMain(27.5,12.5,4);
+    A0.atkOut=true;A0.atkTgt=foeTC;A0.atkMode='march';A0.tbackOn=false;
+    dbg.aiMilTick(0);
+    R.tbackAcross=A0.tbackOn;R.stillOut=A0.atkOut===true;
+    R.dAcross=+(Math.hypot(across[0].x-myTC.x,across[0].y-myTC.y)/TILE).toFixed(1);
+    for(const u of across)u.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    const nearH=mkMain(10.5,12.5,4);
+    A0.atkOut=true;A0.atkTgt=foeTC;A0.atkMode='march';A0.tbackOn=false;
+    dbg.aiMilTick(0);
+    R.tbackHome=A0.tbackOn;
+    for(const u of nearH)u.hp=0;for(const u of foeRaid)u.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    const thin=mkMain(27.5,12.5,1);
+    A0.atkOut=true;A0.atkTgt=foeTC;A0.atkMode='march';
+    dbg.aiMilTick(0);
+    R.thinStr=+units.filter(u=>u.side===0&&isLandMil(u)&&u.grp===tags[AI_G.main]&&!u.gar).reduce((s,u)=>s+uStr(u),0).toFixed(1);
+    R.thinEnd=AI_WAVE_END;R.noEndAcross=A0.atkOut===true;
+    for(const u of thin)u.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    const thinH=mkMain(12.5,12.5,1);
+    A0.atkOut=true;A0.atkTgt=foeTC;A0.atkMode='march';
+    dbg.aiMilTick(0);
+    R.endHome=A0.atkOut===false;
+    for(const u of thinH)u.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    const foeFarmHome=placeB(1,'farm',8,20,true);foeFarmHome.seen=true;foeFarmHome.seenE=true;
+    const ash2=mkMain(27.5,12.5,4);
+    A0.atkOut=true;A0.atkTgt=foeFarmHome;A0.atkMode='march';
+    dbg.aiMilTick(0);
+    R.retgtSameComp=!!A0.atkTgt&&A0.atkTgt!==foeFarmHome&&dbg.aiPCompNear(A0.atkTgt.x,A0.atkTgt.y)===dbg.aiPCompNear(foeTC.x,foeTC.y);
+    for(const u of ash2)u.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    buildings=buildings.filter(b=>b!==foeFarmHome);
+    A0.atkOut=false;A0.atkTgt=null;
+    const q4=[];for(let i=0;i<4;i++)q4.push(spawnUnit(0,'spear',(11+i*0.4)*TILE,10.5*TILE,tags[AI_G.reinf]));
+    R.tuMoved=AICMD.transferUnits(0,AI_G.reinf,AI_G.main,[q4[0],q4[2]]);
+    R.tuOnly=q4[0].grp===tags[AI_G.main]&&q4[2].grp===tags[AI_G.main]&&q4[1].grp===tags[AI_G.reinf]&&q4[3].grp===tags[AI_G.reinf];
+    R.tuAgain=AICMD.transferUnits(0,AI_G.reinf,AI_G.main,[q4[0]]);
+    for(const u of q4)u.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    aiFullVision=false;
+    dbg.aiMilTick(0);R.capCross=dbg.aiWaveObs(0).resCap;R.isCross=aiCrossWater(0);
+    terr.fill(T_PLAIN);paintTerrain();computeLandComp();pathCompDirty=true;ensurePathComp();aiSeaInit();
+    dbg.aiMilTick(0);R.capLand=dbg.aiWaveObs(0).resCap;R.isCross2=aiCrossWater(0);
+    R.capX=AI_AMPH_CAPX;
+    units.length=0;villagers.length=0;buildings.length=0;nodes.length=0;
+    A(0).amph=null;A(0).amphT=-1e9;A(0).atkOut=false;A(0).atkTgt=null;A(0).thr=null;gameOver=null;
+    return R;`);
+  check('段E2·登陸不撤退①：人在對岸＝aiAshore 認得出（陸路分量 ≠ 家）·T_back 回防例外不適用（直線 13 格也一樣·對照組在家就回防）',
+    t126c.ashore===true&&t126c.homeNotAshore===true&&t126c.tbackAcross===false&&t126c.tbackHome===true, t126c);
+  check('段E2·登陸不撤退②：殘存低於收波門檻·人在對岸＝波不結束（打到死）；同樣殘存在家＝照舊收波（沒有把收波邏輯整條拆掉）',
+    t126c.thinStr<t126c.thinEnd&&t126c.noEndAcross===true&&t126c.endHome===true, t126c);
+  check('段E2·登陸不撤退③：目標若在自家陸塊（走不到）＝改選同陸塊的已知敵目標（否則登陸部隊會在灘頭發呆）',
+    t126c.retgtSameComp===true, t126c);
+  check('段E2·逐兵轉隊 AICMD.transferUnits：只動點名的那幾隻·重複呼叫不重複轉（登陸交還攻兵團靠它精準）',
+    t126c.tuMoved===2&&t126c.tuOnly===true&&t126c.tuAgain===0, t126c);
+  check('段E2·跨海圖備兵上限 ×AI_AMPH_CAPX（否則 2.2 波的出發門檻永遠湊不到）·陸圖不變＝零回歸',
+    t126c.isCross===true&&t126c.isCross2===false&&Math.abs(t126c.capCross/t126c.capLand-t126c.capX)<0.05, t126c);
+
+  console.log('\n[128] 🩹 2026-07-27 真機回饋修正輪：拖曳手勢崩潰／登艦死區／跨島村民發呆／繞開大船／運輸艦編隊');
+  const t128 = await ev(`
+    units.length=0;villagers.length=0;buildings.length=0;blocked.fill(0);wallMask.fill(0);gateMask.fill(0);scouts.length=0;nodes.length=0;
+    aiWave=99999;aiDefT=1e9;arenaMode=false;gameOver=null;aiFullVision=false;shipSel=[];placing=null;
+    for(const k in stock)stock[k]=1e9;for(const k in stockOf(1))stockOf(1)[k]=1e9;starving=false;starveN=0;
+    terr.fill(T_PLAIN);trect(20,0,24,TH-1,T_WATER);paintTerrain();
+    explored.fill(1);exploredE.fill(1);computeLandComp();pathCompDirty=true;ensurePathComp();
+    const myTC=placeB(0,'tc',6,12,true), foeTC=placeB(1,'tc',60,40,true);
+    aiSeaInit();dbg.setAiSide(0,false);dbg.setAiSide(1,false);computeDanger();
+    const R={},C=(tx,ty)=>({x:(tx+0.5)*TILE,y:(ty+0.5)*TILE});
+
+    R.utMissing=(UT[undefined]===undefined)&&!UT.scout&&!UT.villager;
+    R.dragOK={};
+    for(const [nm,mk] of [['村民',()=>{spawnVillager(myTC);return villagers[villagers.length-1];}],
+                          ['斥候',()=>{spawnScout(myTC);return scouts[scouts.length-1];}],
+                          ['陸軍',()=>spawnUnit(0,'spear',C(8,14).x,C(8,14).y,dbg.tagsOf(0)[0])],
+                          ['運輸艦',()=>spawnUnit(0,'transport',C(22,12).x,C(22,12).y,dbg.tagsOf(0)[3])]]){
+      const u=mk(),p=(UT[u.type]&&UT[u.type].dom==='water')?C(22,20):C(10,16);
+      u.x=u.x;u.nudge=null;u.path=[];
+      pts.clear();pts.set(7,{x:0,y:0});
+      nudgeU=u;nudgeMoved=true;nudgeDown={x:0,y:0};panMoved=false;
+      try{cvUp({pointerId:7,clientX:(p.x-cam.x)*cam.z,clientY:(p.y-cam.y)*cam.z});
+        R.dragOK[nm]=!!u.nudge||!!(u.path&&u.path.length);
+      }catch(e){R.dragOK[nm]='THROW:'+e.message;}
+      pts.clear();nudgeU=null;
+    }
+    villagers.length=0;scouts.length=0;units.length=0;
+
+    R.boardThresholds={ship:1.6,board:1.7};
+    gameOver=null;
+    const T0=spawnUnit(0,'transport',C(21,12).x,C(21,12).y,dbg.tagsOf(0)[3]);
+    const sp0=spawnUnit(0,'spear',C(21,12).x-TILE*1.9,C(21,12).y,dbg.tagsOf(0)[0]);
+    R.gapTiles=Math.round(Math.hypot(T0.x-sp0.x,T0.y-sp0.y)/TILE*100)/100;
+    boardTransport(sp0,T0);
+    let boardT=-1;
+    for(let k=0;k<30*12;k++){T0.path=[];T0.dest=null;
+      step(TICK);if(sp0.gar===T0){boardT=Math.round(t*10)/10;break;}}
+    R.boardedInDeadzone=boardT>0;R.boardStallOK=boardT>0;
+    R.cargoOne=(T0.cargo||[]).length===1;
+    units.length=0;
+
+    nodes.length=0;
+    nodes.push({type:'food',x:C(8,14).x,y:C(8,14).y,amt:9999,max:9999});
+    nodes.push({type:'wood',x:C(54,14).x,y:C(54,14).y,amt:9999,max:9999});
+    const outR=placeB(0,'outpost',52,14,true);
+    S_(0).shares={food:0.25,wood:0.5,gold:0.15,stone:0.1};
+    for(let i=0;i<8;i++)spawnVillager(myTC);
+    for(const v of villagers)if((v.side||0)===0){v.x=C(8,15).x+((v.id||0)%3)*10;v.y=C(8,15).y;v.job=null;v.node=null;}
+    rebalance(0);
+    const mine=villagers.filter(v=>(v.side||0)===0&&v.hp>0);
+    R.villN=mine.length;
+    R.villWood=mine.filter(v=>v.job==='wood').length;
+    R.villFood=mine.filter(v=>v.job==='food').length;
+    R.compAvail={wood:[...resCompAvail(0).wood],food:[...resCompAvail(0).food]};
+    nodes[1].x=C(10,14).x;nodes[1].y=C(10,14).y;
+    for(const v of mine){v.job=null;v.node=null;}
+    rebalance(0);
+    R.villWoodBack=villagers.filter(v=>(v.side||0)===0&&v.job==='wood').length>0;
+    villagers.length=0;nodes.length=0;buildings=buildings.filter(b=>b!==outR);
+
+    const fb=spawnUnit(0,'fishing',C(21,30).x,C(21,30).y,dbg.tagsOf(0)[3]);
+    const blk=spawnUnit(0,'transport',C(21,30).x+28,C(21,30).y,dbg.tagsOf(0)[3]);
+    blk.movedT=-99;
+    const stp=uSpeed(fb)*TICK;
+    R.stp=Math.round(stp*10)/10;
+    R.lookOld=Math.round((stp+bodyR(fb)+10)*10)/10;
+    R.lookNew=Math.round((stp+bodyR(fb)+bodyR(blk)+4)*10)/10;
+    R.lookSameSize=(6+6+4)===(6+10);
+    R.avoidBig=!!avoidBlocker(fb,C(24,30).x,C(24,30).y,stp);
+    blk.x=fb.x+90;
+    R.avoidFarNull=avoidBlocker(fb,C(24,30).x,C(24,30).y,stp)===null;
+    R.brMaxOK=BR_MAX>=15;
+    units.length=0;
+
+    cam.x=18*TILE;cam.y=8*TILE;
+    const S1=spawnUnit(0,'transport',C(21,12).x,C(21,12).y,dbg.tagsOf(0)[3]);
+    const S2=spawnUnit(0,'transport',C(23,14).x,C(23,14).y,dbg.tagsOf(0)[3]);
+    const S3=spawnUnit(0,'transport',C(22,60).x,C(22,60).y,dbg.tagsOf(0)[3]);
+    const F1=spawnUnit(0,'fishing',C(22,13).x,C(22,13).y,dbg.tagsOf(0)[3]);
+    const E1=spawnUnit(1,'transport',C(22,15).x,C(22,15).y,dbg.tagsOf(1)[3]);
+    R.pickN=shipSelOnScreen(S1);
+    R.pickOnly=shipSel.every(u=>u.side===0&&UT[u.type].hold)&&shipSel.includes(S1)&&shipSel.includes(S2)
+      &&!shipSel.includes(S3)&&!shipSel.includes(F1)&&!shipSel.includes(E1);
+    const dst=C(22,26);
+    R.destN=shipDestCmd(dst.x,dst.y);
+    R.destPaths=shipSel.filter(u=>u.path&&u.path.length).length;
+    shipSel=[S1,S2];
+    R.destLand=shipDestCmd(C(6,6).x,C(6,6).y)===0;
+    R.destStillWater=S1.path.length>0;
+    units.length=0;shipSel=[];
+    return R;`);
+  check('2026-07-27·拖曳手勢不再崩潰（真的跑 cvUp）：村民/斥候在 UT 沒有條目，舊碼那行 UT[u.type].dom 會丟 TypeError＝整個放開手勢作廢＝單位完全不理你（真機「斥候手動拉不會入海」的真身）',
+    t128.utMissing===true&&t128.dragOK['村民']===true&&t128.dragOK['斥候']===true&&t128.dragOK['陸軍']===true&&t128.dragOK['運輸艦']===true, t128);
+  check('2026-07-27·登艦沒有死區：兵停在 1.9 格（舊碼船等 1.9／登艦要 1.7＝雙方都不動）現在照樣上得了船',
+    t128.gapTiles>1.7&&t128.gapTiles<3&&t128.boardedInDeadzone===true&&t128.cargoOne===true
+    &&t128.boardThresholds.ship<t128.boardThresholds.board, t128);
+  check('2026-07-27·跨島村民不發呆：本島沒有的資源不再分配名額（份額讓給採得到的）；資源搬回本島＝照樣分得到（非假通過）',
+    t128.villWood===0&&t128.villFood===t128.villN&&t128.villN>0&&t128.villWoodBack===true, t128);
+  check('2026-07-27·繞開大船：avoidBlocker 前視含擋路者體型（漁 11＋運 14＝25px 淨空·舊前視只算自己的 ~24px＝要撞上才發現）·**等體型逐字不變**（不動陸戰成本）·遠處不誤繞',
+    t128.avoidBig===true&&t128.avoidFarNull===true&&t128.brMaxOK===true&&t128.lookOld<28&&t128.lookNew>28&&t128.lookSameSize===true, t128);
+  check('2026-07-27·運輸艦編隊：全選只吃「我方·畫面內·運輸艦」；一次下目的地＝每艘都真的有水路（陸地目的＝下不出去且不清舊路徑）',
+    t128.pickN===2&&t128.pickOnly===true&&t128.destN===2&&t128.destPaths===2&&t128.destLand===true&&t128.destStillWater===true, t128);
+
+  console.log('\n[129] 🏝️ 段F·F1＋F3＋F5＋F7（2026-07-27）：開拓隊同船配兵／落地留兵護點／看到敵人才算登陸戰／島上塔優先／跨域接力自動上岸');
+  const t129a = await ev(`
+    units.length=0;villagers.length=0;buildings.length=0;scouts.length=0;nodes.length=0;
+    blocked.fill(0);wallMask.fill(0);gateMask.fill(0);
+    aiWave=99999;aiDefT=1e9;arenaMode=false;gameOver=null;aiFullVision=false;
+    for(const k in stock)stock[k]=1e9;
+    const R={};
+    const reset=()=>{explored.fill(1);exploredE.fill(1);visible.fill(0);visibleE.fill(0);unreachable.fill(0);unreachableE.fill(0);
+      computeLandComp();pathCompDirty=true;ensurePathComp();computeDanger();gameOver=null;};
+    terr.fill(T_PLAIN);trect(20,0,27,TH-1,T_WATER);paintTerrain();reset();
+    const myTC=placeB(0,'tc',6,12,true),foeTC=placeB(1,'tc',60,60,true);
+    dbg.setAiSide(0,false);dbg.setAiSide(1,false);reset();
+    playerTech.researched.add('N7');recomputeTechMod(0);
+    spawnScout(myTC);const sc=scouts[scouts.length-1];
+    const put=(tx,ty,sea)=>{sc.x=(tx+.5)*TILE;sc.y=(ty+.5)*TILE;sc.sea=!!sea;sc.dom=sea?'water':undefined;
+      sc.crossPt=null;sc.crossC=null;sc.morphT=0;sc.morphSpot=null;sc.path=[];sc.dest=null;sc.expT=null;
+      sc.mode='explore';sc.manual=false;sc.nudge=null;sc.repathT=0;};
+    const drag=(tx,ty,sea,tx2,ty2,n)=>{put(tx,ty,sea);sc.nudge={x:(tx2+.5)*TILE,y:(ty2+.5)*TILE};
+      let wet=false,dry=false,steps=0;
+      for(let i=0;i<(n||2400);i++){step(TICK);steps++;if(sc.sea)wet=true;else dry=true;if(!sc.nudge)break;}
+      return {tx:txOf(sc.x),ty:tyOf(sc.y),sea:!!sc.sea,wet,dry,steps};};
+    const r1=drag(10,12,false,40,12);
+    R.a1=r1.sea===false&&pathCompL[idx(r1.tx,r1.ty)]===pathCompL[idx(40,12)]&&r1.wet===true;
+    R.a1at=r1.tx+','+r1.ty;
+    terr.fill(T_WATER);trect(20,0,27,TH-1,T_PLAIN);paintTerrain();
+    buildings.length=0;placeB(0,'tc',22,4,true);placeB(1,'tc',22,66,true);reset();
+    R.b0=pathCompW[idx(10,36)]!==pathCompW[idx(40,36)];
+    const r2=drag(10,36,true,40,36);
+    R.b1=r2.sea===true&&pathCompW[idx(r2.tx,r2.ty)]===pathCompW[idx(40,36)]&&r2.dry===true;
+    R.b1at=r2.tx+','+r2.ty;
+    terr.fill(T_PLAIN);trect(20,3,27,TH-1,T_WATER);paintTerrain();reset();
+    put(10,12,false);
+    R.c1=scoutRelayPlan(sc,0,(40.5)*TILE,(12.5)*TILE)===null&&pathCompL[idx(10,12)]===pathCompL[idx(40,12)];
+    const r3=drag(10,12,false,40,12);
+    R.c2=r3.wet===false;
+    terr.fill(T_PLAIN);
+    trect(8,0,11,TH-1,T_WATER);trect(20,0,23,TH-1,T_WATER);trect(32,0,35,TH-1,T_WATER);
+    trect(44,0,47,TH-1,T_WATER);trect(56,0,59,TH-1,T_WATER);paintTerrain();
+    buildings.length=0;placeB(0,'tc',2,4,true);placeB(1,'tc',70,66,true);reset();
+    put(4,36,false);
+    R.d4=!!scoutRelayPlan(sc,0,(28.5)*TILE,(36.5)*TILE);
+    R.d6=scoutRelayPlan(sc,0,(40.5)*TILE,(36.5)*TILE)===null;
+    R.dmax=SCT_RELAY_MAX;
+    terr.fill(T_PLAIN);trect(20,0,27,TH-1,T_WATER);paintTerrain();
+    buildings.length=0;placeB(0,'tc',6,12,true);placeB(1,'tc',60,60,true);reset();
+    put(21,40,true);
+    const pl=scoutRelayPlan(sc,0,(40.5)*TILE,(12.5)*TILE);
+    R.e1=!!pl&&pl.c===pathCompL[idx(40,12)];
+    sc.x=(20.5)*TILE;sc.y=(40.5)*TILE;sc.path=[];sc.dest=null;
+    R.e2=scoutMorphSpot(sc,false,pl?pl.c:null)===null&&!!scoutMorphSpot(sc,false);
+    scouts.length=0;units.length=0;buildings.length=0;
+    terr.fill(T_PLAIN);paintTerrain();computeLandComp();pathCompDirty=true;gameOver=null;
+    return R;`);
+  check('段F·F7①：拖到另一座島的陸地＝真的上岸站在那座島上（中途確實下過水＝不是走了什麼陸橋）',
+    t129a.a1===true, t129a);
+  check('段F·F7②：水→陸→水（兩片海被島隔開）＝過島再下水·兩個方向同一套機制',
+    t129a.b0===true&&t129a.b1===true, t129a);
+  check('段F·F7③：有純陸路就一段都不展開（規劃器回 null＋行為級整趟沒下水）＝硬條款沒被接力稀釋',
+    t129a.c1===true&&t129a.c2===true, t129a);
+  check('段F·F7④：段數封頂 SCT_RELAY_MAX＝4 段內規劃得出來·6 段的回 null（不規劃荒謬長鏈）',
+    t129a.d4===true&&t129a.d6===true&&t129a.dmax===4, t129a);
+  check('段F·F7⑤：接力鎖住「這一段要換進哪個分量」＝貼著原島岸線走也不會半路爬回原島（不鎖＝當場上得了岸＝非假通過）',
+    t129a.e1===true&&t129a.e2===true, t129a);
+
+  const t129b = await ev(`
+    units.length=0;villagers.length=0;buildings.length=0;scouts.length=0;nodes.length=0;
+    blocked.fill(0);wallMask.fill(0);gateMask.fill(0);
+    aiWave=99999;aiDefT=1e9;arenaMode=false;gameOver=null;aiFullVision=false;
+    for(const k in stock)stock[k]=1e9;for(const k in stockOf(1))stockOf(1)[k]=1e9;starving=false;starveN=0;
+    const R={};
+    terr.fill(T_PLAIN);trect(20,0,27,TH-1,T_WATER);trect(46,0,53,TH-1,T_WATER);paintTerrain();
+    explored.fill(1);exploredE.fill(1);visible.fill(0);visibleE.fill(0);
+    computeLandComp();pathCompDirty=true;ensurePathComp();
+    const myTC=placeB(0,'tc',6,12,true),foeTC=placeB(1,'tc',60,60,true);
+    const dk=placeB(0,'dock',20,12,true);
+    foeTC.seen=true;dk.seen=true;
+    nodes.push({type:'gold',x:32.5*TILE,y:12.5*TILE,amt:900,max:900});
+    aiSeaInit();dbg.setAiSide(0,false);dbg.setAiSide(1,false);dbg.setAiDiff(0,'hard');computeDanger();
+    const A0=A(0);A0.island=null;A0.amph=null;A0.amphT=-1e9;A0.thr=null;
+    const isleC=landComp[idx(32,12)],homeC=landComp[idx(6,12)];
+    R.twoIslands=isleC!==homeC&&isleC>=0;
+    aiIslandStart(0);R.startClean=!!A0.island;
+    A0.island=null;
+    const fb=placeB(1,'tower',32,16,true);fb.seen=true;
+    R.foeSeen=aiIsleFoe(0,isleC)===true;
+    aiIslandStart(0);R.noStartWhenFoe=!A0.island;
+    fb.seen=false;visible.fill(0);
+    R.foeBlind=aiIsleFoe(0,isleC)===false;
+    aiIslandStart(0);R.startWhenBlind=!!A0.island;
+    A0.island=null;
+    killBuilding(fb);buildings=buildings.filter(b=>b.hp>0);computeLandComp();pathCompDirty=true;ensurePathComp();
+    const su=spawnUnit(0,'settler',17.5*TILE,12.5*TILE,tags[0]);
+    const T=spawnUnit(0,'transport',21.5*TILE,12.5*TILE,tags[AI_G.navy]);
+    const rf=[],df=[];
+    for(let i=0;i<3;i++)rf.push(spawnUnit(0,'spear',(17.5)*TILE,(11.5+i)*TILE,tags[AI_G.reinf]));
+    for(let i=0;i<3;i++)df.push(spawnUnit(0,'spear',(16.5)*TILE,(11.5+i)*TILE,tags[AI_G.def]));
+    R.escCap=aiIslEsc(0,T).length;
+    R.escFromReinf=aiIslEsc(0,T).every(u=>u.grp===tags[AI_G.reinf]);
+    for(const u of rf)u.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    R.escDefFloor=aiIslEsc(0,T).length===3-AI_ISL_ESC_DEF;
+    for(let i=0;i<3;i++)rf.push(spawnUnit(0,'spear',(17.5)*TILE,(11.5+i)*TILE,tags[AI_G.reinf]));
+    aiIslandStart(0);R.started=!!A0.island&&A0.island.phase==='train';
+    aiIslandTick(0);
+    const ob1=dbg.aiIslandObs(0);
+    R.toLoad=ob1.phase==='load'&&ob1.esc===2;
+    let sailed=false;
+    for(let i=0;i<900&&!sailed;i++){aiIslandTick(0);step(TICK);sailed=A0.island&&A0.island.phase!=='load';}
+    const ob2=dbg.aiIslandObs(0);
+    R.sailWithEsc=!!A0.island&&A0.island.phase==='sail'&&ob2.escOn>=1;
+    R.cargoMix=T.cargo&&T.cargo.includes(su)&&T.cargo.some(u=>u.type==='spear');
+    R.escCarried=ob2.escOn;
+    A0.island=null;
+    for(const u of (T.cargo||[]).slice()){const i=(T.cargo||[]).indexOf(u);if(i>=0)T.cargo.splice(i,1);u.gar=null;}
+    const esc2=units.filter(u=>u.side===0&&u.hp>0&&u.type==='spear'&&u.grp===tags[AI_G.reinf]).slice(0,2);
+    for(const u of esc2){u.x=32.5*TILE;u.y=14.5*TILE;u.gar=null;u.garTgt=null;}
+    const ob=placeB(0,'outpost',31,11,true);
+    aiIslandHold(0,{esc:esc2,su:{deployB:ob},node:{x:32.5*TILE,y:12.5*TILE},land:{x:32.5*TILE,y:13.5*TILE}});
+    R.holdTag=esc2.every(u=>u.grp===tags[AI_G.rgu]);
+    R.holdGar=esc2.every(u=>u.garTgt===ob||u.gar===ob);
+    R.holdNotReinf=!units.some(u=>u.side===0&&u.grp===tags[AI_G.reinf]&&esc2.indexOf(u)>=0);
+    A0.homeRally={x:myTC.x,y:myTC.y};
+    R.isleNoVill=aiIsleOuts(0).length;
+    spawnVillager(ob);const iv=villagers[villagers.length-1];iv.x=32.5*TILE;iv.y=15.5*TILE;
+    R.isleWithVill=aiIsleOuts(0).length;
+    const sp=aiTowerSpot(0,20);
+    R.twrIsleFirst=sp===ob;
+    const capIsle=(()=>{aiMapFeat(0,true);return aiTowerCap(0);})();
+    iv.hp=0;villagers=villagers.filter(v=>v.hp>0);
+    const capNo=(()=>{aiMapFeat(0,true);return aiTowerCap(0);})();
+    R.capUp=capIsle-capNo;
+    const spNo=aiTowerSpot(0,20);
+    R.twrHomeWhenNoVill=spNo===A0.homeRally;
+    dbg.setAiDiff(0,'boss');spawnVillager(ob);const iv2=villagers[villagers.length-1];iv2.x=32.5*TILE;iv2.y=15.5*TILE;
+    const capBoss=(()=>{aiMapFeat(0,true);return aiTowerCap(0);})();
+    const f=aiMapFeat(0,true);
+    R.bossNoDouble=capBoss===f.defHome+f.defMines+f.defOuts&&f.defIsle>=1;
+    units.length=0;villagers.length=0;buildings.length=0;nodes.length=0;
+    terr.fill(T_PLAIN);paintTerrain();computeLandComp();pathCompDirty=true;
+    A(0).island=null;A(0).amph=null;A(0).homeRally=null;dbg.setAiDiff(0,'hard');gameOver=null;
+    return R;`);
+  check('段F·F3 分流：島上**看得到**敵人＝登陸戰的活（開拓隊不去）／同一棟建築沒看到＝照去（情報不完整是設計的一部分·不用全知修掉）',
+    t129b.twoIslands===true&&t129b.startClean===true&&t129b.foeSeen===true&&t129b.noStartWhenFoe===true
+    &&t129b.foeBlind===true&&t129b.startWhenBlind===true, t129b);
+  check('段F·F1 配兵挑法：上限 2 隻·備兵優先·抽守備隊要留底 2（護島不能把家門掏空）',
+    t129b.escCap===2&&t129b.escFromReinf===true&&t129b.escDefFloor===true, t129b);
+  check('段F·F1 同船帶兵（行為級）：開拓隊與護衛兵**同一條船**·湊齊才開船',
+    t129b.started===true&&t129b.toLoad===true&&t129b.sailWithEsc===true&&t129b.cargoMix===true, t129b);
+  check('段F·F1 落地留兵護點：護衛兵改編資源守衛（不留在備兵團＝不卡 D5 的開船閘）＋整團進駐新開拓中心（軍團級·不開 per-unit 後門）',
+    t129b.holdTag===true&&t129b.holdGar===true&&t129b.holdNotReinf===true, t129b);
+  check('段F·F5 島上塔優先：離島開拓中心排在家門之前·且島上有村民才算（沒村民＝蓋不起來＝不下令·對照組回家門）',
+    t129b.isleNoVill===0&&t129b.isleWithVill===1&&t129b.twrIsleFirst===true&&t129b.twrHomeWhenNoVill===true, t129b);
+  check('段F·F5 塔名額：離島開拓中心不分難度都算一個守點（+1）·魔王（已含 defOuts）不重複加',
+    t129b.capUp===1&&t129b.bossNoDouble===true, t129b);
+
+  const t129c = await ev(`
+    units.length=0;villagers.length=0;buildings.length=0;scouts.length=0;
+    for(const k in stock)stock[k]=1e9;
+    const R={},u=spawnUnit(0,'spear',10*TILE,10*TILE,tags[0]);
+    S_(0).starving=false;openUnitPanel(u);
+    const h0=document.querySelector('#bldPanel').innerHTML;
+    R.noneWhenFed=!h0.includes('缺糧降效中');
+    R.spFed=h0.includes('移速 '+Math.round(UT.spear.sp));
+    S_(0).starving=true;openUnitPanel(u);
+    const h1=document.querySelector('#bldPanel').innerHTML;
+    R.lineWhenStarving=h1.includes('缺糧降效中');
+    R.spCut=h1.includes('移速 '+Math.round(UT.spear.sp*0.75)+'↓');       // 數字本身就是降後值（不是只加一行字）
+    R.cdShown=h1.includes((UT.spear.cd*1.33).toFixed(2));
+    S_(0).starving=false;closePanels();units.length=0;
+    return R;`);
+  check('2026-07-26 附帶項·缺糧降效寫進單位面板：移速印**降後值**＋一行紅字列出三個降項（吃飽時完全不出現）',
+    t129c.noneWhenFed===true&&t129c.spFed===true&&t129c.lineWhenStarving===true
+    &&t129c.spCut===true&&t129c.cdShown===true, t129c);
+
+  console.log('\n[130] 🛡️ 段F·F9 本土被登陸的救援分流（2026-07-27 使用者裁決）：趕得回改問真路徑（島圖）／有其他都市＝進攻隊繼續／備兵已開拔也叫得回／換家承諾窗優先');
+  const t130 = await ev(`
+    AI_SQUADS=true;AI_NORETREAT=true;AI_TBACK_PATH=true;AI_TBACK_BACKUP=true;
+    const C=(tx,ty)=>({x:(tx+0.5)*TILE,y:(ty+0.5)*TILE});
+    const G=dbg.AI_G,R={};
+    const world=()=>{units.length=0;villagers.length=0;buildings.length=0;nodes.length=0;scouts.length=0;shots.length=0;
+      blocked.fill(0);wallMask.fill(0);gateMask.fill(0);terr.fill(T_PLAIN);paintTerrain();
+      computeLandComp();pathCompDirty=true;ensurePathComp();
+      explored.fill(1);exploredE.fill(1);unreachable.fill(0);unreachableE.fill(0);computeDanger();
+      gameOver=null;aiWave=99999;aiDefT=1e9;aiFullVision=true;AI_SEA.ready=false;};
+    const scene=()=>{world();placeB(0,'tc',44,20,true);const home=placeB(1,'tc',6,20,true);placeB(1,'barracks',9,20,true);
+      for(const k in stockOf(1))stockOf(1)[k]=3000;
+      techOf(1).researched.clear();techOf(1).age=2;techOf(1).track=null;techOf(1).queue.length=0;techOf(1).ageUp=null;recomputeTechMod(1);
+      dbg.setAiDiff(1,'hard');dbg.A(1).pers=null;dbg.setAiPers(1,'england');dbg.aiResetBrain(1);
+      dbg.A(1).plan={open:'std',routeBias:0,harass:false};dbg.A(1).intelT=t;dbg.A(1).homeRally={x:C(11,20).x,y:C(11,20).y};
+      villagers.length=0;return home;};
+    const etc=()=>buildings.find(b=>b.side===0&&b.type==='tc');
+    const atkOut=(tx,ty)=>{const gM=tagsOf(1)[G.main];for(let i=0;i<6;i++)spawnUnit(1,'spear',C(tx,ty).x+i*8,C(tx,ty).y,gM);
+      dbg.A(1).atkOut=true;dbg.A(1).atkTgt=etc();dbg.A(1).atkMode='march';};
+    const siege=()=>{for(let i=0;i<10;i++)spawnUnit(0,'spear',C(7,20).x+(i%5)*8,C(7,20).y+((i/5)|0)*8,tags[5]);};
+    scene();
+    R.aFlat=dbg.aiTbackReach(1,C(18,20).x,C(18,20).y)===true;
+    R.aFar=dbg.aiTbackReach(1,C(36,20).x,C(36,20).y)===false;
+    trect(12,0,15,34,T_WATER);paintTerrain();computeLandComp();pathCompDirty=true;ensurePathComp();computeDanger();
+    R.bBay=dbg.aiTbackReach(1,C(18,20).x,C(18,20).y)===false;
+    AI_TBACK_PATH=false;
+    R.bBayOld=Math.hypot(C(18,20).x-C(6,20).x,C(18,20).y-C(6,20).y)<=AI_TBACK_R;
+    AI_TBACK_PATH=true;
+    trect(12,0,15,TH-1,T_WATER);paintTerrain();computeLandComp();pathCompDirty=true;ensurePathComp();computeDanger();
+    R.cCut=dbg.aiTbackReach(1,C(18,20).x,C(18,20).y)===false;
+    scene();atkOut(18,20);siege();
+    dbg.aiMilTick(1);
+    {const o=dbg.aiWaveObs(1);R.noCityBack=o.tback===true&&o.mode==='defend';}
+    R.cityN0=dbg.aiCityN(1);
+    scene();atkOut(18,20);siege();placeB(1,'outpost',30,30,true);
+    dbg.aiMilTick(1);
+    {const o=dbg.aiWaveObs(1);R.outpostStillBack=o.tback===true;}
+    R.cityNOut=dbg.aiCityN(1);
+    scene();atkOut(18,20);siege();placeB(1,'city',30,30,true);
+    dbg.aiMilTick(1);
+    {const o=dbg.aiWaveObs(1);R.cityNoBack=o.tback===false&&o.atkOut===true;}
+    R.cityN1=dbg.aiCityN(1);
+    AI_TBACK_BACKUP=false;
+    scene();atkOut(18,20);siege();placeB(1,'city',30,30,true);
+    dbg.aiMilTick(1);
+    {const o=dbg.aiWaveObs(1);R.backupAblate=o.tback===true;}
+    AI_TBACK_BACKUP=true;
+    scene();atkOut(30,20);
+    {const gR=tagsOf(1)[G.reinf];for(let i=0;i<6;i++)spawnUnit(1,'spear',C(20,20).x+i*8,C(20,20).y,gR);}
+    dbg.A(1).resDep=true;dbg.A(1).muster=0;
+    siege();
+    dbg.aiMilTick(1);
+    {const o=dbg.aiWaveObs(1);R.resRecall=o.resDep===false;}
+    {const gR=tagsOf(1)[G.reinf];const ru=units.filter(u=>u.side===1&&u.grp===gR&&u.hp>0);
+     R.resGuard=ru.length>0&&tagsOf(1)[G.reinf].task==='guard'
+       &&Math.hypot(tagsOf(1)[G.reinf].pt.x-C(7,20).x,tagsOf(1)[G.reinf].pt.y-C(7,20).y)<TILE*6;}
+    scene();atkOut(30,20);
+    {const gR=tagsOf(1)[G.reinf];for(let i=0;i<6;i++)spawnUnit(1,'spear',C(20,20).x+i*8,C(20,20).y,gR);}
+    dbg.A(1).resDep=true;dbg.A(1).muster=0;
+    dbg.aiMilTick(1);
+    R.resKeep=dbg.aiWaveObs(1).resDep===true;
+    scene();atkOut(18,20);siege();
+    dbg.A(1).mission={kind:'swap',tgt:etc(),nib:null};dbg.A(1).swapT=t;
+    dbg.aiMilTick(1);
+    {const o=dbg.aiWaveObs(1);R.swapHold=o.tback===false;}
+    scene();atkOut(18,20);siege();
+    dbg.A(1).mission={kind:'swap',tgt:etc(),nib:null};dbg.A(1).swapT=t-AI_SWAP_WIN-1;
+    dbg.aiMilTick(1);
+    {const o=dbg.aiWaveObs(1);R.swapExpired=o.tback===true;}
+    units.length=0;buildings.length=0;terr.fill(T_PLAIN);paintTerrain();computeLandComp();pathCompDirty=true;
+    dbg.aiResetBrain(1);gameOver=null;
+    return R;`);
+  check('段F·F9①「趕得回」改問真路徑：平地與舊判準同答案·隔海灣（直線 12 格但要繞遠）＝來不及·完全隔死＝來不及（舊直線判準在同一場景說「趕得回」＝分岔證明）',
+    t130.aFlat===true&&t130.aFar===true&&t130.bBay===true&&t130.bBayOld===true&&t130.cCut===true, t130);
+  check('段F·F9②有其他都市＝進攻隊繼續打·只剩首都＝全部回頭守（開拓中心不算都市·消融 AI_TBACK_BACKUP=false 退回舊行為）',
+    t130.noCityBack===true&&t130.cityN0===0&&t130.outpostStillBack===true&&t130.cityNOut===0
+    &&t130.cityNoBack===true&&t130.cityN1===1&&t130.backupAblate===true, t130);
+  check('段F·F9③增援改去防守：備兵**已經開拔去併前波**之後家門才起火＝取消開拔＋令指向家門（對照：家門沒事＝照樣去併波）',
+    t130.resRecall===true&&t130.resGuard===true&&t130.resKeep===true, t130);
+  check('段F·F9④換家承諾窗優先：窗內不被 T_back 叫回（賭注不自毀）·窗過期＝回一般規則',
+    t130.swapHold===true&&t130.swapExpired===true, t130);
+
+  console.log('\n[131] 🏝️ 段F·F8 上島撞敵＝就地轉軍事（2026-07-27 使用者裁決）：開拓隊不退·在敵人範圍外落點／島上有敵＝產兵為主·島被清空＝自動轉回生產');
+  const t131 = await ev(`
+    units.length=0;villagers.length=0;buildings.length=0;scouts.length=0;nodes.length=0;
+    blocked.fill(0);wallMask.fill(0);gateMask.fill(0);
+    aiWave=99999;aiDefT=1e9;arenaMode=false;gameOver=null;aiFullVision=true;AI_ISL_MIL=true;
+    for(const k in stock)stock[k]=1e9;for(const k in stockOf(1))stockOf(1)[k]=1e9;starving=false;starveN=0;
+    const R={};
+    terr.fill(T_PLAIN);trect(20,0,27,TH-1,T_WATER);trect(46,0,53,TH-1,T_WATER);paintTerrain();
+    explored.fill(1);exploredE.fill(1);visible.fill(1);visibleE.fill(1);
+    computeLandComp();pathCompDirty=true;ensurePathComp();
+    const myTC=placeB(0,'tc',6,12,true);placeB(1,'tc',60,60,true);placeB(0,'dock',20,12,true);
+    dbg.setAiSide(0,false);dbg.setAiSide(1,false);dbg.setAiDiff(0,'hard');computeDanger();
+    const A0=dbg.A(0);A0.island=null;A0.amph=null;A0.thr=null;A0.homeRally={x:myTC.x,y:myTC.y};
+    const isleC=landComp[idx(36,12)];
+    const node={x:36.5*TILE,y:12.5*TILE};nodes.push({type:'gold',x:node.x,y:node.y,amt:900,max:900});
+    const su=spawnUnit(0,'settler',36.5*TILE,12.5*TILE,tags[0]);
+    R.noFoeNull=aiIsleSafeSpot(0,su,node,isleC)===null;
+    const foe=spawnUnit(1,'spear',44.5*TILE,12.5*TILE,tagsOf(1)[0]);
+    R.foeSeen=aiIsleFoe(0,isleC)===true&&aiIsleFoePts(0,isleC).length===1;
+    const sp=aiIsleSafeSpot(0,su,node,isleC);
+    R.spot=!!sp;
+    R.spotSafe=!!sp&&Math.hypot(sp.x-foe.x,sp.y-foe.y)>=AI_ISL_AVOID;
+    R.spotBetter=!!sp&&Math.hypot(sp.x-foe.x,sp.y-foe.y)>Math.hypot(node.x-foe.x,node.y-foe.y);
+    R.spotInR=!!sp&&Math.hypot(sp.x-su.x,sp.y-su.y)<=DEPLOY_R*TILE;
+    R.spotPlaceable=!!sp&&AICMD.deploySettler(su,sp.x,sp.y);
+    su.deployTgt=null;su.deployB=null;
+    foe.x=36.5*TILE;foe.y=12.5*TILE;
+    const sp2=aiIsleSafeSpot(0,su,node,isleC);
+    R.fallback=!!sp2&&Math.hypot(sp2.x-foe.x,sp2.y-foe.y)<AI_ISL_AVOID;
+    foe.x=44.5*TILE;foe.y=12.5*TILE;
+    units=units.filter(u=>u!==su);
+    const ob=placeB(0,'outpost',35,11,true);
+    spawnVillager(ob);const iv=villagers[villagers.length-1];iv.x=36.5*TILE;iv.y=15.5*TILE;
+    R.isleOut=aiIsleOuts(0).length===1;
+    const isleBar=()=>buildings.some(b=>b.side===0&&b.hp>0&&b.type==='barracks'&&landComp[idx(txOf(b.x),tyOf(b.y))]===isleC);
+    ob.cq=[];dbg.aiEcoTick(0);
+    R.warNoVill=(ob.cq||[]).length===0;
+    foe.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    R.cleared=aiIsleFoe(0,isleC)===false;
+    ob.cq=[];dbg.aiEcoTick(0);
+    R.peaceVill=(ob.cq||[]).some(q=>q.u==='villager');
+    const foe2=spawnUnit(1,'spear',44.5*TILE,12.5*TILE,tagsOf(1)[0]);
+    dbg.setAiDiff(0,'normal');
+    const STRAT=10,strat=()=>{A0.cmt.length=0;for(let i=0;i<STRAT;i++)dbg.aiStratTick(0);};
+    const clrBar=()=>{buildings=buildings.filter(b=>!(b.type==='barracks'&&landComp[idx(txOf(b.x),tyOf(b.y))]===isleC));};
+    strat();
+    R.warBar=isleBar();
+    clrBar();
+    villagers.length=0;
+    strat();
+    R.noVillNoBar=!isleBar();
+    clrBar();
+    spawnVillager(ob);const iv2=villagers[villagers.length-1];iv2.x=36.5*TILE;iv2.y=15.5*TILE;
+    AI_ISL_MIL=false;strat();
+    R.milAblate=!isleBar();
+    AI_ISL_MIL=true;clrBar();
+    units.length=0;villagers.length=0;buildings.length=0;nodes.length=0;A0.pool.length=0;
+    A0.island=null;A0.homeRally=null;dbg.setAiDiff(0,'hard');
+    terr.fill(T_PLAIN);paintTerrain();computeLandComp();pathCompDirty=true;gameOver=null;
+    return R;`);
+  check('段F·F8①開拓隊不退·在敵人範圍外落點：有敵＝推到 AI_ISL_AVOID 外且比礦旁遠·仍在部署令範圍內且真的下得了令（無敵＝完全不介入）',
+    t131.noFoeNull===true&&t131.foeSeen===true&&t131.spot===true&&t131.spotSafe===true
+    &&t131.spotBetter===true&&t131.spotInR===true&&t131.spotPlaceable===true, t131);
+  check('段F·F8②保底：整座島都在敵人臉上時**仍然給得出落點**（「找不到安全點就不部署」＝等於撤退＝違反裁決）',
+    t131.fallback===true, t131);
+  check('段F·F8③軍事路線：島上有敵＝村民上限降到 1（不砍到 0＝軍營還要人蓋）·島被清空＝自動轉回生產路線（旗跟著述詞走·無殘留狀態）',
+    t131.isleOut===true&&t131.warNoVill===true&&t131.cleared===true&&t131.peaceVill===true, t131);
+  check('段F·F8④島上軍營：有敵＝不吃難度閘照樣蓋（普通難度也要）·島上沒村民＝不下令（不製造永遠蓋不起來的工地）·消融 AI_ISL_MIL=false 退回舊行為',
+    t131.warBar===true&&t131.noVillNoBar===true&&t131.milAblate===true, t131);
+
+  console.log('\n[132] 🏝️ 段F·F8 D6 離島遠征（2026-07-27 第三輪·段F 最後一塊）：派兵攻佔（多少兵才夠／放棄條款）／離島軍 g6 指揮／島上產的兵合流回本土');
+  const t132a = await ev(`
+    units.length=0;villagers.length=0;buildings.length=0;scouts.length=0;nodes.length=0;
+    blocked.fill(0);wallMask.fill(0);gateMask.fill(0);
+    aiWave=99999;aiDefT=1e9;arenaMode=false;gameOver=null;aiFullVision=true;
+    AI_ISL_WAR=true;AI_SQUADS=true;
+    for(const k in stock)stock[k]=1e9;for(const k in stockOf(1))stockOf(1)[k]=1e9;starving=false;starveN=0;
+    const R={};
+    terr.fill(T_PLAIN);trect(20,0,27,TH-1,T_WATER);trect(46,0,53,TH-1,T_WATER);paintTerrain();
+    explored.fill(1);exploredE.fill(1);visible.fill(1);visibleE.fill(1);
+    computeLandComp();pathCompDirty=true;ensurePathComp();
+    const myTC=placeB(0,'tc',6,12,true),foeTC=placeB(1,'tc',60,60,true);
+    const dk=placeB(0,'dock',20,12,true);foeTC.seen=true;dk.seen=true;
+    nodes.push({type:'gold',x:32.5*TILE,y:12.5*TILE,amt:900,max:900});
+    nodes.push({type:'gold',x:60.5*TILE,y:40.5*TILE,amt:900,max:900});
+    aiSeaInit();dbg.setAiSide(0,false);dbg.setAiSide(1,false);dbg.setAiDiff(0,'hard');computeDanger();
+    const A0=A(0);A0.island=null;A0.amph=null;A0.amphT=-1e9;A0.islw=null;A0.islwT=-1e9;A0.islFail={};
+    A0.thr=null;A0.homeRally={x:myTC.x,y:myTC.y};A0.waveReq=0;
+    const isleC=landComp[idx(32,12)],homeC=landComp[idx(6,12)],foeC=landComp[idx(60,60)];
+    R.threeLands=isleC!==homeC&&foeC!==isleC&&foeC!==homeC;
+    R.cleanNull=aiIslWarTgt(0)===null;
+    const foes=[];for(let i=0;i<4;i++)foes.push(spawnUnit(1,'spear',(36.5+i)*TILE,12.5*TILE,tagsOf(1)[0]));
+    const fs=aiIsleFoeStr(0,isleC);
+    const tg=aiIslWarTgt(0);
+    R.tgtComp=!!tg&&tg.comp===isleC;
+    R.needK=!!tg&&Math.abs(tg.need-Math.max(AI_AMPH_MINS,fs*AI_ISL_WAR_K))<0.05&&tg.need>AI_AMPH_MINS;
+    R.foeStr=fs;R.need=tg?tg.need:null;
+    const fh=spawnUnit(1,'spear',60.5*TILE,42.5*TILE,tagsOf(1)[0]);
+    R.foeHomeSeen=aiIsleFoe(0,foeC)===true;
+    R.notFoeHome=aiIslWarTgt(0).comp===isleC;
+    fh.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    const many=[];for(let i=0;i<24;i++)many.push(spawnUnit(1,'spear',(36.5+(i%8))*TILE,(14.5+((i/8)|0))*TILE,tagsOf(1)[0]));
+    R.tooHard=aiIsleFoeStr(0,isleC)>AI_ISL_WAR_MAX&&aiIslWarTgt(0)===null;
+    for(const u of many)u.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    const T0=spawnUnit(0,'transport',21.5*TILE,12.5*TILE,tags[AI_G.navy]);
+    aiIslWarStart(0);R.noStartThin=!A0.islw;
+    const rf=[];for(let i=0;i<7;i++)rf.push(spawnUnit(0,'spear',18.5*TILE,(8.5+i)*TILE,tags[AI_G.reinf]));
+    aiIslWarStart(0);R.noStartShare=!A0.islw&&rf.reduce((s,u)=>s+uStr(u),0)>=(aiIslWarTgt(0)||{need:0}).need;
+    for(let i=0;i<7;i++)rf.push(spawnUnit(0,'spear',17.5*TILE,(8.5+i)*TILE,tags[AI_G.reinf]));
+    aiIslWarStart(0);
+    const o1=dbg.aiIslWarObs(0);
+    R.started=o1.on===true&&o1.mode==='out'&&o1.phase==='gather'&&o1.comp===isleC;
+    R.lock=o1.lock===true;
+    const waveOn=()=>{const o=dbg.aiWaveObs(0);return o.atkOut===true||o.muster>0;};
+    const islwSave=A0.islw;
+    A0.muster=0;A0.atkOut=false;dbg.aiMilTick(0);R.noMuster=waveOn()===false;
+    A0.islw=null;A0.muster=0;A0.atkOut=false;dbg.aiMilTick(0);R.musterWhenFree=waveOn()===true;
+    A0.islw=islwSave;A0.muster=0;A0.atkOut=false;A0.atkTgt=null;A0.islwT=-1e9;
+    AICMD.transferTag(0,AI_G.main,AI_G.reinf);
+    for(let i=0;i<AI_ISL_FAIL_N;i++){A0.islw={mode:'out',phase:'fight',pT:t,comp:isleC,need:6,T:[],force:[]};aiIslWarEnd(0,true);}
+    R.giveUp=aiIslWarTgt(0)===null&&dbg.aiIslWarObs(0).fail[isleC].cd>0;
+    A0.islFail={};A0.islw=null;A0.islwT=-1e9;
+    A0.islw={mode:'out',phase:'fight',pT:t,comp:isleC,need:6,T:[],force:[]};aiIslWarEnd(0,true);
+    A0.islw={mode:'out',phase:'gather',pT:t,comp:isleC,need:6,T:[],force:[]};aiIslWarEnd(0);
+    R.neutralKeeps=dbg.aiIslWarObs(0).fail[isleC].n===1;
+    A0.islw={mode:'out',phase:'fight',pT:t,comp:isleC,need:6,T:[],force:[]};aiIslWarEnd(0,false);
+    R.successClears=dbg.aiIslWarObs(0).fail[isleC].n===0;
+    A0.islFail={};
+    const ob0=placeB(0,'outpost',31,11,true);
+    for(let i=0;i<AI_ISL_FAIL_N;i++){A0.islw={mode:'out',phase:'fight',pT:t,comp:isleC,need:6,T:[],force:[]};aiIslWarEnd(0,true);}
+    R.keepWhileOwn=!!aiIslWarTgt(0);
+    killBuilding(ob0);buildings=buildings.filter(b=>b.hp>0);A0.islFail={};A0.islw=null;A0.islwT=-1e9;
+    AI_ISL_WAR=false;aiIslWarStart(0);R.ablate=!A0.islw;AI_ISL_WAR=true;
+    units.length=0;villagers.length=0;buildings.length=0;nodes.length=0;
+    A0.islw=null;A0.islFail={};A0.homeRally=null;A0.waveReq=0;A0.muster=0;
+    terr.fill(T_PLAIN);paintTerrain();computeLandComp();pathCompDirty=true;gameOver=null;
+    return R;`);
+  check('段F·F8①派兵攻佔·目標選擇：島上看得到敵人才算（沒敵人＝D4 開拓隊的活）·**敵中樞那座島不歸這條**（那是 D5 登陸戰）·太硬（>AI_ISL_WAR_MAX）＝不派小分隊去餵',
+    t132a.threeLands===true&&t132a.cleanNull===true&&t132a.tgtComp===true
+    &&t132a.foeHomeSeen===true&&t132a.notFoeHome===true&&t132a.tooHard===true, t132a);
+  check('段F·F8①「多少兵才夠」＝島上**已知**敵軍 uStr 總和 ×AI_ISL_WAR_K（地板 AI_AMPH_MINS）·湊不到就不開任務·有跨海主目標時最多只花備兵的一半（D5 優先·但用比例不用差額＝不是死旗）',
+    t132a.needK===true&&t132a.noStartThin===true&&t132a.noStartShare===true&&t132a.started===true, t132a);
+  check('段F·F8①備兵鎖：任務進行中＝備兵團歸任務指揮·陸路波不開始集結（清掉任務＝同場景當場集結＝分岔證明）',
+    t132a.lock===true&&t132a.noMuster===true&&t132a.musterWhenFree===true, t132a);
+  check('段F·F8①放棄條款：同島連續失敗 3 次且**我方建築歸零**＝冷卻內不再評估（島上還有建築＝不放棄）·收尾三態（中性中止不清帳／打下來才歸零）·消融退回舊行為',
+    t132a.giveUp===true&&t132a.keepWhileOwn===true&&t132a.neutralKeeps===true
+    &&t132a.successClears===true&&t132a.ablate===true, t132a);
+
+  const t132b = await ev(`
+    units.length=0;villagers.length=0;buildings.length=0;scouts.length=0;nodes.length=0;
+    blocked.fill(0);wallMask.fill(0);gateMask.fill(0);
+    aiWave=99999;aiDefT=1e9;arenaMode=false;gameOver=null;aiFullVision=true;
+    AI_ISL_WAR=true;AI_SQUADS=true;
+    for(const k in stock)stock[k]=1e9;for(const k in stockOf(1))stockOf(1)[k]=1e9;starving=false;starveN=0;
+    const R={};
+    terr.fill(T_PLAIN);trect(20,0,27,TH-1,T_WATER);trect(46,0,53,TH-1,T_WATER);paintTerrain();
+    explored.fill(1);exploredE.fill(1);visible.fill(1);visibleE.fill(1);
+    computeLandComp();pathCompDirty=true;ensurePathComp();
+    const myTC=placeB(0,'tc',6,12,true),foeTC=placeB(1,'tc',60,60,true);
+    const dk=placeB(0,'dock',20,12,true);foeTC.seen=true;dk.seen=true;
+    nodes.push({type:'gold',x:32.5*TILE,y:12.5*TILE,amt:900,max:900});
+    aiSeaInit();dbg.setAiSide(0,false);dbg.setAiSide(1,false);dbg.setAiDiff(0,'hard');computeDanger();
+    const A0=A(0);A0.island=null;A0.amph=null;A0.amphT=-1e9;A0.islw=null;A0.islwT=-1e9;A0.islFail={};
+    A0.thr=null;A0.homeRally={x:myTC.x,y:myTC.y};A0.waveReq=0;
+    const isleC=landComp[idx(32,12)],homeC=landComp[idx(6,12)];
+    const T0=spawnUnit(0,'transport',21.5*TILE,12.5*TILE,tags[AI_G.navy]);
+    const foe=spawnUnit(1,'spear',40.5*TILE,12.5*TILE,tagsOf(1)[0]);
+    const rf=[];for(let i=0;i<7;i++)rf.push(spawnUnit(0,'spear',18.5*TILE,(8.5+i)*TILE,tags[AI_G.reinf]));
+    for(let i=0;i<7;i++)rf.push(spawnUnit(0,'spear',17.5*TILE,(8.5+i)*TILE,tags[AI_G.reinf]));
+    aiIslWarStart(0);
+    aiIslWarTick(0);
+    const o1=dbg.aiIslWarObs(0);
+    R.picked=o1.phase==='load'&&o1.force>0&&o1.force<rf.length;
+    R.forceN=o1.force;
+    let land=false;
+    for(let i=0;i<3000&&!land;i++){aiIslWarTick(0);step(TICK);land=A0.islw&&A0.islw.phase==='fight';}
+    const o2=dbg.aiIslWarObs(0);
+    R.reachedFight=land===true;
+    R.onIsle=o2.isle>0;
+    const gR=tags[AI_G.rgu],gRe=tags[AI_G.reinf],gM=tags[AI_G.main];
+    const isleU=units.filter(u=>u.side===0&&isLandMil(u)&&u.hp>0&&!u.gar&&landComp[idx(txOf(u.x),tyOf(u.y))]===isleC);
+    R.toRgu=isleU.length>0&&isleU.every(u=>u.grp===gR);
+    R.notMain=!isleU.some(u=>u.grp===gM||u.grp===gRe);
+    aiIslForceTick(0);
+    R.attackOrder=gR.task==='attack'&&!!gR.pt&&Math.hypot(gR.pt.x-foe.x,gR.pt.y-foe.y)<TILE*3;
+    const ob=placeB(0,'outpost',31,11,true);
+    foe.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    aiIslWarTick(0);
+    R.success=!A0.islw&&!(A0.islFail[isleC]&&A0.islFail[isleC].n>0);
+    aiIslForceTick(0);
+    R.guardOrder=gR.task==='guard'&&!!gR.pt&&Math.hypot(gR.pt.x-ob.x,gR.pt.y-ob.y)<TILE*3;
+    const on=units.filter(u=>u.side===0&&isLandMil(u)&&u.hp>0&&!u.gar&&u.grp===gR);
+    R.ferryStr=+on.reduce((s,u)=>s+uStr(u),0).toFixed(1);
+    const fp=aiIslFerryPick(0);
+    R.ferryPick=!!fp&&fp.comp===isleC;
+    const foe2=spawnUnit(1,'spear',33.5*TILE,12.5*TILE,tagsOf(1)[0]);
+    R.ferryNotWhenFoe=aiIslFerryPick(0)===null;
+    foe2.hp=0;units=units.filter(u=>u.hp>0||u.gar);
+    for(const u of on){u.x=14.5*TILE;u.y=12.5*TILE;}
+    aiIslForceTick(0);
+    R.merged=on.every(u=>u.grp===gRe)&&!units.some(u=>u.side===0&&u.grp===gR&&u.hp>0&&!u.gar);
+    AICMD.transferUnits(0,AI_G.reinf,AI_G.rgu,on);
+    on[0].x=32.5*TILE;on[0].y=12.5*TILE;
+    for(let i=1;i<on.length;i++){on[i].x=(i===1?60.5:32.5)*TILE;on[i].y=(i===1?40.5:13.5)*TILE;}
+    R.splitN=on.length;
+    gR.task='guard';gR.pt=null;A(0).ord.length=0;
+    aiIslForceTick(0);
+    R.splitNoOrder=gR.pt===null;
+    units.length=0;villagers.length=0;buildings.length=0;nodes.length=0;
+    A0.islw=null;A0.islFail={};A0.homeRally=null;A(0).ord.length=0;
+    terr.fill(T_PLAIN);paintTerrain();computeLandComp();pathCompDirty=true;gameOver=null;
+    return R;`);
+  check('段F·F8①行為級全鏈：點名分隊（不是整團搬走）→登艦→航渡→卸兵，上岸的兵改編**離島軍 g6**（不是攻兵團 g0＝不攪亂「主力在不在對岸」）',
+    t132b.picked===true&&t132b.reachedFight===true&&t132b.onIsle===true
+    &&t132b.toRgu===true&&t132b.notMain===true, t132b);
+  check('段F·F8①離島軍指揮：島上有敵＝attack-move 到敵軍質心／島被清空＝任務成功結案（不記失敗）＋改守自家據點',
+    t132b.attackOrder===true&&t132b.success===true&&t132b.guardOrder===true, t132b);
+  check('段F·F8④合流：清空的島上多出來的兵＝叫船來接（島上還有敵＝不接）·人回到本土當場併回備兵 g5',
+    t132b.ferryPick===true&&t132b.ferryNotWhenFoe===true&&t132b.merged===true, t132b);
+  check('段F·F8④離島軍散在兩座島＝這個 tick 不下令（軍團令是全團一個點·下了就會把另一座島的兵一路拉到海邊發呆＝跨函式死區）',
+    t132b.splitNoOrder===true&&t132b.splitN>=2, t132b);
+
+  const t132c = await ev(`
+    units.length=0;villagers.length=0;buildings.length=0;scouts.length=0;nodes.length=0;
+    blocked.fill(0);wallMask.fill(0);gateMask.fill(0);
+    aiWave=99999;aiDefT=1e9;arenaMode=false;gameOver=null;aiFullVision=true;
+    AI_ISL_WAR=true;AI_SQUADS=true;
+    for(const k in stock)stock[k]=1e9;for(const k in stockOf(1))stockOf(1)[k]=1e9;starving=false;starveN=0;
+    const R={};
+    terr.fill(T_PLAIN);trect(20,0,27,TH-1,T_WATER);paintTerrain();
+    explored.fill(1);exploredE.fill(1);visible.fill(1);visibleE.fill(1);
+    computeLandComp();pathCompDirty=true;ensurePathComp();
+    const myTC=placeB(0,'tc',6,12,true),foeTC=placeB(1,'tc',60,60,true);foeTC.seen=true;
+    aiSeaInit();dbg.setAiSide(0,false);dbg.setAiSide(1,false);dbg.setAiDiff(0,'hard');computeDanger();
+    const A0=A(0);A0.island=null;A0.amph=null;A0.islw=null;A0.islFail={};A0.thr=null;A0.homeRally={x:myTC.x,y:myTC.y};
+    const isleC=landComp[idx(32,12)],homeC=landComp[idx(6,12)];
+    R.twoLands=isleC!==homeC;
+    const isleBar=placeB(0,'barracks',32,12,true);
+    const qOf=b=>(b.queue||[]).map(q=>q.tag);
+    isleBar.queue.length=0;A0.pool.length=0;A0.cmt.length=0;
+    for(let i=0;i<12&&!isleBar.queue.length;i++)dbg.aiMilTick(0);
+    R.isleTag=isleBar.queue.length>0&&qOf(isleBar).every(g=>g===AI_G.rgu);
+    R.isleNotReinf=!qOf(isleBar).some(g=>g===AI_G.reinf);
+    isleBar.queue.length=0;
+    const homeBar=placeB(0,'barracks',9,12,true);
+    buildings=[homeBar].concat(buildings.filter(b=>b!==homeBar));
+    for(let i=0;i<12&&!homeBar.queue.length;i++)dbg.aiMilTick(0);
+    R.homeTag=homeBar.queue.length>0&&!qOf(homeBar).some(g=>g===AI_G.rgu);
+    isleBar.queue.length=0;homeBar.queue.length=0;
+    buildings=buildings.filter(b=>b!==homeBar);
+    AI_ISL_WAR=false;
+    for(let i=0;i<12&&!isleBar.queue.length;i++)dbg.aiMilTick(0);
+    R.ablateTag=isleBar.queue.length>0&&!qOf(isleBar).some(g=>g===AI_G.rgu);
+    AI_ISL_WAR=true;
+    units.length=0;villagers.length=0;buildings.length=0;nodes.length=0;
+    A0.islw=null;A0.islFail={};A0.homeRally=null;A0.pool.length=0;A0.cmt.length=0;
+    terr.fill(T_PLAIN);paintTerrain();computeLandComp();pathCompDirty=true;gameOver=null;
+    return R;`);
+  check('段F·F8④生產分流：**離島軍營出廠的兵不掛 g5**（g5 的待命令是走去家門集結點＝島上出廠的兵會走到岸邊發呆·又被 D5 的開船閘算成湊得到的兵力）·家裡的軍營照舊·消融退回舊行為',
+    t132c.twoLands===true&&t132c.isleTag===true&&t132c.isleNotReinf===true
+    &&t132c.homeTag===true&&t132c.ablateTag===true, t132c);
+
+  console.log('\n[133] 🗺️ 指定水域版型＝種子搜尋（2026-07-27 使用者「想試群島圖但隨機一直跑不出來·可以選地圖類型更好」）：首頁選了版型就往上找一顆抽到該版型的種子——鎖住①找到的種子真的是那個版型②純函式（同輸入同輸出）③已經符合的種子原地不動＝不會平白換圖④四種版型都找得到⑤找不到也不會回傳垃圾種子');
+  const t133 = await ev(`
+    const F=dbg.genSeedFor,P=dbg.genMapPlan,R={};
+    const kinds=['none','lake','strait','arch'];
+    R.hit=kinds.every(w=>P(F(w,20260723)).water===w);              // ①找到的真的是該版型
+    R.pure=kinds.every(w=>F(w,20260723)===F(w,20260723));          // ②純函式（首頁提示行與 Go 各算一次·不能兩張圖）
+    const archS=F('arch',20260723);
+    R.arch=archS; R.archOK=P(archS).water==='arch';
+    R.fixed=F('arch',archS)===archS;                               // ③已經是群島的種子＝原地不動
+    R.fwd=archS>=20260723;                                         // 只往上找（不會跑到使用者填的種子之前）
+    R.badFrom=F('arch',0)>0&&P(F('arch',0)).water==='arch';         // ⑤起點是 0/負數也要回一顆能用的種子
+    R.archRare=(()=>{let n=0;for(let s=1;s<=120;s++)if(P(s).water==='arch')n++;return n;})();
+    return R;`);
+  check('🗺️ 指定版型：四種水域版型都找得到、找到的種子真的抽到該版型，且是純函式（提示行與 Go 各算一次不會給兩張圖）',
+    t133.hit===true&&t133.pure===true&&t133.archOK===true, t133);
+  check('🗺️ 指定版型：已經符合的種子原地不動（不會平白換掉使用者的圖）·只往上找·起點非法（0）也回得出能用的種子',
+    t133.fixed===true&&t133.fwd===true&&t133.badFrom===true, t133);
+  check('🗺️ 群島本來就稀有＝這個功能有存在意義（種子 1~120 只有約一成抽得到·使用者「隨機一直跑不出來」屬實）',
+    t133.archRare>0&&t133.archRare<=25, t133);
+
+  console.log('\n[134] 🔭 斥候上島（2026-07-27 使用者真機：「斥候注意到敵島就不會進去探索·手動拉也沒用（三種偵察狀態都是）」）：斥候列拖曳三態共用同一條跨域規則／沒研發快艇＝說一聲並回自走（不凍住）／水上型態島優先於海／單段換域鎖分量（不再海陸乒乓）');
+  const t134 = await ev(`
+    units.length=0;villagers.length=0;buildings.length=0;scouts.length=0;nodes.length=0;
+    blocked.fill(0);wallMask.fill(0);gateMask.fill(0);
+    aiWave=99999;aiDefT=1e9;arenaMode=false;gameOver=null;aiFullVision=false;
+    for(const k in stock)stock[k]=1e9;
+    const R={};
+    const reset=()=>{visible.fill(0);visibleE.fill(0);unreachable.fill(0);unreachableE.fill(0);
+      computeLandComp();pathCompDirty=true;ensurePathComp();computeDanger();gameOver=null;};
+    terr.fill(T_PLAIN);trect(20,0,27,TH-1,T_WATER);paintTerrain();
+    const myTC=placeB(0,'tc',6,12,true),foeTC=placeB(1,'tc',60,60,true);
+    dbg.setAiSide(0,false);dbg.setAiSide(1,false);
+    explored.fill(1);exploredE.fill(1);reset();
+    playerTech.researched.add('N7');recomputeTechMod(0);
+    spawnScout(myTC);const sc=scouts[scouts.length-1];
+    const put=(tx,ty,sea,md)=>{sc.x=(tx+.5)*TILE;sc.y=(ty+.5)*TILE;sc.sea=!!sea;sc.dom=sea?'water':undefined;
+      sc.crossPt=null;sc.crossC=null;sc.morphT=0;sc.morphSpot=null;sc.path=[];sc.dest=null;sc.expT=null;
+      sc.mode=md||'explore';sc.manual=false;sc.nudge=null;sc.manT=null;sc.lastSeen=null;sc.quarry=null;sc.pt=null;sc.repathT=0;sc.hurtT=-9;};
+    const order=(md,tx2,ty2,n)=>{put(10,12,false,md);scoutOrderTo(sc,(tx2+.5)*TILE,(ty2+.5)*TILE);
+      let wet=false;for(let i=0;i<(n||3600);i++){step(TICK);if(sc.sea)wet=true;
+        if(!sc.sea&&pathCompL[idx(txOf(sc.x),tyOf(sc.y))]===pathCompL[idx(tx2,ty2)])break;}
+      return {tx:txOf(sc.x),ty:tyOf(sc.y),sea:!!sc.sea,wet,onTgt:!sc.sea&&pathCompL[idx(txOf(sc.x),tyOf(sc.y))]===pathCompL[idx(tx2,ty2)]};};
+    for(const md of ['explore','observe','sentry']){const r=order(md,40,12);R['a_'+md]=r.onTgt===true&&r.wet===true;R['a_'+md+'at']=r.tx+','+r.ty;}
+    const rSame=order('explore',16,30,900);R.aSame=rSame.wet===false;
+    playerTech.researched.delete('N7');recomputeTechMod(0);
+    const oAlert=alertMsg;let said=null;window.alertMsg=function(c,m){said=m;return oAlert(c,m);};
+    put(10,12,false,'explore');scoutOrderTo(sc,(40.5)*TILE,(12.5)*TILE);
+    for(let i=0;i<60;i++)step(TICK);
+    R.b1=said===STR.msg_scoutNeedBoat;
+    R.b2=sc.manT===null&&sc.manual===false&&!!sc.expT;
+    window.alertMsg=oAlert;
+    playerTech.researched.add('N7');recomputeTechMod(0);
+    explored.fill(1);exploredE.fill(1);
+    for(let ty=0;ty<TH;ty++)for(let tx=30;tx<TW;tx++)explored[idx(tx,ty)]=0;
+    for(let ty=0;ty<=10;ty++)for(let tx=20;tx<28;tx++)explored[idx(tx,ty)]=0;
+    reset();
+    put(24,12,true,'explore');sc.repathT=0;
+    const wTgt=nearestUnexploredDom(sc,0);
+    R.c1has=!!wTgt&&Math.hypot(wTgt.x-sc.x,wTgt.y-sc.y)<TILE*3.5;
+    for(let i=0;i<8;i++)step(TICK);
+    R.c1=!!sc.crossPt&&sc.crossC===pathCompL[idx(40,12)];
+    explored.fill(1);exploredE.fill(1);
+    for(let ty=0;ty<TH;ty++)for(let tx=20;tx<28;tx++)explored[idx(tx,ty)]=0;
+    reset();
+    put(24,12,true,'explore');sc.repathT=0;
+    for(let i=0;i<8;i++)step(TICK);
+    R.c2=!sc.crossPt&&!!sc.expT&&pathCompW[idx(txOf(sc.expT.x),tyOf(sc.expT.y))]>=0;
+    explored.fill(1);exploredE.fill(1);
+    for(let ty=0;ty<TH;ty++)for(let tx=30;tx<TW;tx++)explored[idx(tx,ty)]=0;
+    reset();
+    put(20,12,true,'explore');
+    let morphs=0,lastSea=true;
+    for(let i=0;i<1800;i++){step(TICK);if(!!sc.sea!==lastSea){morphs++;lastSea=!!sc.sea;}}
+    R.d1=morphs<=1;
+    R.dmorphs=morphs;
+    R.d2=!sc.sea?pathCompL[idx(txOf(sc.x),tyOf(sc.y))]===pathCompL[idx(40,12)]:true;
+    scouts.length=0;units.length=0;buildings.length=0;
+    terr.fill(T_PLAIN);paintTerrain();explored.fill(1);exploredE.fill(1);computeLandComp();pathCompDirty=true;gameOver=null;
+    return R;`);
+  check('🔭 斥候①：斥候列拖曳到另一座島＝三種偵察狀態**都**真的過海上岸（走 scoutOrderTo 這條唯一入口·中途確實下過水）',
+    t134.a_explore===true&&t134.a_observe===true&&t134.a_sentry===true, t134);
+  check('🔭 斥候①bis：拖到自己這座島上的點＝一次都不下水（「同域走得到就不換域」沒被稀釋）',
+    t134.aSame===true, t134);
+  check('🔭 斥候②：沒研發偵察快艇＝告訴玩家原因，並讓斥候回到自走（不再拿著一個到不了的點凍在原地）',
+    t134.b1===true&&t134.b2===true, t134);
+  check('🔭 斥候③：水上型態**島優先於海**——旁邊有未探完的島就規劃上岸（且鎖住那座島的分量），不是先把整片海探完',
+    t134.c1===true&&t134.c1has===true, t134);
+  check('🔭 斥候③bis：島都探完了才在水上找目標（反證＝上一條不是「沒得挑才上岸」）',
+    t134.c2===true, t134);
+  check('🔭 斥候④：單段換域也鎖分量＝貼著自家島岸的海上不會就地爬回自家島（海陸乒乓：30 秒內換域次數 ≤1）',
+    t134.d1===true&&t134.d2===true, t134);
 
   console.log(`\n==== ${pass} passed, ${fail} failed ====`);
 } catch (e) {

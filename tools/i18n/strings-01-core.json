@@ -4,7 +4,6 @@
   "鐵": "Iron",
   "金": "Gold",
   "食": "Food",
-
   "槍兵": "Spearman",
   "槍": "SPR",
   "弓兵": "Archer",
@@ -35,7 +34,6 @@
   "火": "FIR",
   "投石船": "Siege Ship",
   "uc_siegeship:石": "SGE",
-
   "城鎮中心": "Town Center",
   "軍營": "Barracks",
   "箭塔": "Tower",
@@ -53,7 +51,6 @@
   "兵械工坊": "Siege Workshop",
   "碼頭": "Dock",
   "漁籠": "Fish Trap",
-
   "🎣 下漁籠（60 木·可再生海食）": "🎣 Place fish trap (60 wood · renewable sea food)",
   "需先研發 漁業改良": "Requires the Fisheries research",
   "漁籠只能下在深水（漁船所在深水格）": "Fish traps go in deep water only (a deep tile the boat is on)",
@@ -67,7 +64,6 @@
   "點換 {x}": "Tap for {x}",
   "開": "on",
   "關": "off",
-
   "攻擊": "Attack",
   "守備": "Guard",
   "釘守": "Hold",
@@ -79,7 +75,6 @@
   "開拓": "Explore",
   "警戒": "Sentry",
   "遠觀": "Observe",
-
   "經濟": "Economy",
   "建造": "Build",
   "科技": "Research",
@@ -144,7 +139,6 @@
   "ⓘ 兵種資訊": "ⓘ Unit reference",
   "兵種｜攻｜近防｜遠防｜體積｜軍糧": "Unit | ATK | Melee DEF | Ranged DEF | Size | Upkeep",
   "村民": "Villager",
-
   "{ic} {nm}　HP {h}/{mx}": "{ic} {nm}　HP {h}/{mx}",
   "{ic} {nm}（敵）　HP {h}/{mx}": "{ic} {nm} (enemy)　HP {h}/{mx}",
   "文明表徵：{c}（{u} 為其專屬）": "Civilisation tell: {c} ({u} is unique to it)",
@@ -185,5 +179,8 @@
   "駐軍全部撒出（{n}）": "Empty the garrison ({n})",
   "開拓中心（資源回收／避難）": "Outpost (drop-off point / shelter)",
   "都市（後備命）": "City (backup life)",
-  "通用卸貨點：採集自動就近卸貨": "Universal drop-off: gatherers deliver to the nearest one"
+  "通用卸貨點：採集自動就近卸貨": "Universal drop-off: gatherers deliver to the nearest one",
+  "偵察快艇": "Scout Skiff",
+  "uc_scoutSea:艇": "SKF",
+  "是(走不到)": "yes (unreachable)"
 }

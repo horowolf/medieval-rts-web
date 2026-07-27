@@ -1,6 +1,5 @@
 {
   "\" data-d=\"1\">＋</button>\n    <span class=\"pct\" id=\"pc_": "\" data-d=\"1\">+</button>\n    <span class=\"pct\" id=\"pc_",
-
   "\\t世界(": "\\tworld(",
   ")\\t格(": ")\\ttile(",
   "# RTS slice4 移動 log　匯出 t=": "# RTS movement log　exported at t=",
@@ -14,7 +13,6 @@
   "🛰 軌跡": "🛰 Trace",
   "▸ 展開": "▸ Expand",
   "▾ 縮小": "▾ Collapse",
-
   "槍vs槍": "Spear vs Spear",
   "弓vs槍": "Archer vs Spear",
   "騎vs弓": "Cavalry vs Archer",
@@ -24,7 +22,6 @@
   "🌊火船vs投石船": "🌊 Fire Ship vs Siege Ship",
   "🌊海戰混": "🌊 Mixed fleets",
   "左右各需至少一個兵": "Each side needs at least one unit",
-
   "現在：": "Now: ",
   "\\n點一下換到：": "\\nTap to switch to: ",
   "（重載）": " (reloads)",
@@ -42,7 +39,6 @@
   "🎲 隨機": "🎲 Random",
   "<span class=\"diffHint\">🎲 隨機（魔王以上不給選＝對手文明要自己派斥候看出來）</span>": "<span class=\"diffHint\">🎲 Random — not selectable at Boss and above: scout to find out who you are facing</span>",
   "<span class=\"homeSub\" style=\"margin:0\">🎲 隨機——魔王以上不給選，對手文明要自己派斥候看出來。</span>": "<span class=\"homeSub\" style=\"margin:0\">🎲 Random — not selectable at Boss and above. Scout to find out who you are facing.</span>",
-
   "距": "dist ",
   " 徑": " path ",
   " 有dest": " has dest",
@@ -53,7 +49,6 @@
   "：採集 ×": ": gathering ×",
   "、M 線攻防 +": ", attack/defence line +",
   " 階（明示）": " step(s), stated openly",
-
   "存檔參照遺失：": "Save file references something missing: ",
   "存檔對不上本版資料表：": "Save file does not match this build's data tables: ",
   "存檔格式版本不符（檔 v": "Save format mismatch (file v",
@@ -80,5 +75,12 @@
   "KB）": " KB)",
   "已匯出：": "Exported: ",
   "已刪除欄位 ": "Cleared slot ",
-  "匯入失敗：": "Import failed: "
+  "匯入失敗：": "Import failed: ",
+  "🏞 無水": "🏞 Dry",
+  "💧 湖泊": "💧 Lakes",
+  "🌊 海峽": "🌊 Strait",
+  "🏝 群島": "🏝 Archipelago",
+  "　→ ": "　→ ",
+  "：種子 ": ": seed ",
+  "（開始時再抽）": "(rolled at start)"
 }
